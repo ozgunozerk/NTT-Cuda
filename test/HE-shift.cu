@@ -97,7 +97,7 @@ __global__ void inverseNTTbarrett(unsigned long long a[])
 
 }
 
-__device__ __forceinline__ inline void singleBarrett(uint128_t& a)
+__device__ __forceinline__ void singleBarrett(uint128_t& a)
 {
     register int bit_length = bit_length_;
 
