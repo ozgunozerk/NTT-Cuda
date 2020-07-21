@@ -123,7 +123,7 @@ __device__ __forceinline__ inline void singleBarrett(uint128_t& a)
 __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long psi_powers[], int length)
 {
     register int global_tid = blockIdx.x * nttBlockSize + threadIdx.x;
-    register int step = (__fdividef(__fdividef(N, length)), 2);
+    register int step = __fdividef(__fdividef(N, length), 2);
     register int step_group_amount = __fdividef(global_tid, step);
     register int target_index = step_group_amount * step * 2 + global_tid % step;
 
