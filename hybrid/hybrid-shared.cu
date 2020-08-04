@@ -123,8 +123,6 @@ __global__ void CTBasedNTTInnerSingle(unsigned a[], unsigned psi_powers[], unsig
         register int global_tid = local_tid + iteration_num * nttBlockSize;
         shared_array[global_tid] = a[global_tid + blockIdx.x * (N / l)];
     }
-
-    __syncthreads();
     
 
     #pragma unroll
@@ -178,8 +176,6 @@ __global__ void CTBasedNTTInnerSingle(unsigned a[], unsigned psi_powers[], unsig
         register int global_tid = local_tid + iteration_num * nttBlockSize;
         a[global_tid + blockIdx.x * (N / l)] = shared_array[global_tid];
     }
-
-    __syncthreads();
     
 }
 
