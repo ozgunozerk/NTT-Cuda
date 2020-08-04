@@ -148,8 +148,6 @@ __global__ void CTBasedNTTInner(unsigned long long global_array[], unsigned long
         shared_array[global_tid] = global_array[global_tid];
     }
 
-    __syncthreads();
-
     #pragma unroll
     for (int length = 1; length < 17; length *= 2)
     {
@@ -256,8 +254,6 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long psii
         shared_array[global_tid] = a[global_tid];
     }
 
-    __syncthreads();
-
     #pragma unroll
     for (int length = N / 2; length > 16; length /= 2))
     {
@@ -344,7 +340,6 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long psii
         register int global_tid = local_tid + iteration_num * nttBlockSize;
         a[global_tid] = shared_array[global_tid];
     }
-    
 }
 
 __global__ void GSBasedINTTMerged(unsigned long long a[], unsigned long long psiinv[])
