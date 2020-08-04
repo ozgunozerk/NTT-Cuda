@@ -124,8 +124,6 @@ __global__ void CTBasedNTTInner(unsigned a[], unsigned psi_powers[])
         shared_array[global_tid] = a[global_tid];
     }
 
-    __syncthreads();
-
     #pragma unroll
     for (int length = 1; length < N; length *= 2)
     {
@@ -196,8 +194,6 @@ __global__ void GSBasedINTTInner(unsigned a[], unsigned psiinv_powers[])
         shared_array[global_tid] = a[global_tid];
     }
 
-    __syncthreads();
-
     #pragma unroll
     for (int length = N / 2; length > 0; length /= 2)
     {
@@ -242,7 +238,6 @@ __global__ void GSBasedINTTInner(unsigned a[], unsigned psiinv_powers[])
         register int global_tid = local_tid + iteration_num * nttBlockSize;
         a[global_tid] = shared_array[global_tid];
     }
-    __syncthreads();
 }
 
 void printArray(unsigned a[])
