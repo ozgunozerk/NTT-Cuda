@@ -5,6 +5,8 @@
 using std::cout;
 using std::endl;
 
+//bö
+
 #include "helper.h"
 #include "parameter.h"
 #include "uint128.h"
