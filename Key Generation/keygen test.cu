@@ -12,9 +12,77 @@ using std::vector;
 #include "poly_arithmetic.cuh"
 #include "distributions.cuh"
 
-#define check 1
+#define check 0
 
 int main()
+{
+    int n = 1024 * 4;
+
+    vector<unsigned long long> q = { 68719403009, 68719230977, 137438822401 };
+    vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };
+    vector<unsigned> q_bit_lengths = { 36, 36, 37 };
+    unsigned q_amount = q.size();
+
+    cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
+    for (int i = 0; i < q_amount; i++)
+        cudaStreamCreate(&streams[i]);
+    
+    unsigned char* in;
+    cudaMalloc(&in, (sizeof(char) + sizeof(unsigned) + sizeof(unsigned long long)) * q_amount * n);
+
+    unsigned long long** secret_key = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    for (int i = 0; i < q_amount; i++)
+    {
+        cudaMalloc(&secret_key[i], sizeof(unsigned long long) * n);
+    }
+    
+    unsigned long long*** public_key = (unsigned long long***)malloc(sizeof(unsigned long long**) * 2);
+    public_key[0] = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    public_key[1] = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    for (int i = 0; i < 2; i++)
+    {
+        for (int j = 0; j < q_amount; j++)
+        {
+            cudaMalloc(&public_key[i][j], sizeof(unsigned long long) * n);
+        }
+    }
+    unsigned long long** temp = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    for (int i = 0; i < q_amount; i++)
+    {
+        cudaMalloc(&temp[i], sizeof(unsigned long long) * q_amount * n);
+    }
+
+    generate_random(in, (sizeof(char) + sizeof(unsigned) + sizeof(unsigned long long)) * q_amount * n, streams[0]);
+
+    for (int i = 0; i < q_amount; i++)
+    {
+        ternary_dist(in + i * n, secret_key[i], n, streams[i], q[i]);
+    }
+
+    unsigned long long* output;
+    cudaMallocHost(&output, sizeof(unsigned long long) * n);
+    cudaMemcpyAsync(output, secret_key[2], sizeof(unsigned long long) * n, cudaMemcpyDeviceToHost, streams[2]);
+
+    cudaDeviceSynchronize();
+
+    /*int c = 0, v = 0, b = 0;
+    for (int i = 0; i < n; i++)
+    {
+        if (output[i] == (q[2] - 1))
+            c++;
+        else if (output[i] == 0)
+            v++;
+        else if (output[i] == 1)
+            b++;
+    }
+
+    printf("%d, %d, %d\n", c, v, b);*/
+
+
+    return 0;
+}
+
+int main3()
 {
     //unsigned N = atoi(argv[1]);
     unsigned N = 1024 * 8;
@@ -102,50 +170,6 @@ int main()
     }
 
     cudaFreeHost(a); cudaFreeHost(b);
-
-    return 0;
-}
-
-int main2()
-{
-    int n = 1024 * 4;
-
-    vector<unsigned long long> q = { 68719403009, 68719230977, 137438822401 };
-    cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q.size());
-    unsigned q_amount = q.size();
-
-    unsigned char** in = (unsigned char**)malloc(sizeof(unsigned char*) * q_amount);
-    unsigned long long** out = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
-    for (int i = 0; i < q_amount; i++)
-    {
-        cudaMalloc(&in[i], sizeof(unsigned char) * n);
-        cudaMalloc(&out[i], sizeof(unsigned long long) * n);
-        cudaStreamCreate(&streams[i]);
-    }
-
-    for (int i = 0; i < q_amount; i++)
-    {
-        ternary_dist(in[i], out[i], n, streams[i], q[i]);
-    }
-
-    unsigned long long* host;
-    cudaMallocHost(&host, sizeof(unsigned long long) * n);
-    cudaMemcpyAsync(host, out[2], sizeof(unsigned long long) * n, cudaMemcpyDeviceToHost, streams[0]);
-
-    cudaDeviceSynchronize();
-
-    unsigned c = 0, v = 0, b = 0;
-    for (int i = 0; i < n; i++)
-    {
-        if (host[i] == (q[2] - 1))
-            c++;
-        if (host[i] == 0)
-            v++;
-        if (host[i] == 1)
-            b++;
-    }
-
-    printf("q - 1 count: %d, 0 count: %d, 1 count: %d\n", c, v, b);
 
     return 0;
 }

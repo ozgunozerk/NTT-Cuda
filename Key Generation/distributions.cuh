@@ -18,7 +18,7 @@ __global__ void convert_range(unsigned long long*, unsigned long long*, unsigned
 
 __global__ void convert_ternary(unsigned char*, unsigned long long*, unsigned long long);
 
-void generate_random(unsigned char*, unsigned, cudaStream_t&, int length);
+void generate_random(unsigned char*, unsigned, cudaStream_t&);
 
 void gaussian_dist(unsigned*, unsigned long long*, unsigned, cudaStream_t&, unsigned long long);
 

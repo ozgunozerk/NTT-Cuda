@@ -208,19 +208,23 @@ __global__ void convert_ternary(unsigned char* in, unsigned long long* out, unsi
         out[i] = 0;
     else
         out[i] = q - 1;
+
+    //printf("%llu\n", out[i]);
 }
 
-void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream, int length)
+void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream)
 {
     unsigned char* d_A = a;
 
-    unsigned int NBLKS = n / 8 / length, N;
+    unsigned int NBLKS = n / 64, N;
     int threadsPerBlock, blocksPerGrid;
     size_t size, i;
     unsigned char k[32];
     uint64_t v_nonce;
 
     size = NBLKS * XSALSA20_BLOCKSZ;
+
+    printf("%llu\n", size);
 
     memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
@@ -230,7 +234,7 @@ void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream, int len
     v_nonce = load_littleendian64(h_nonce);
     threadsPerBlock = THREADS_PER_BLOCK;
 
-    cudaMemset(d_A, 0, size);
+    cudaMemsetAsync(d_A, 0, size, stream);
 
     N = NBLKS;
 

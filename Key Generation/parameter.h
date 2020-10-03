@@ -11,6 +11,14 @@ void fillTablePsi128(unsigned long long psi, unsigned long long q, unsigned long
     }
 }
 
+void fillTablePsi128Forward(unsigned long long psi, unsigned long long q, unsigned long long psiTable[], unsigned int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        psiTable[i] = modpow128(psi, bitReverse(i, log2(n)), q);
+    }
+}
+
 void fillTablePsi64(unsigned psi, unsigned q, unsigned psiinv, unsigned psiTable[], unsigned psiinvTable[], unsigned int n)
 {
     for (int i = 0; i < n; i++)
