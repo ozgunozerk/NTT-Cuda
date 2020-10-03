@@ -21,7 +21,11 @@ __global__ void barrett(unsigned long long a[], const unsigned long long b[], un
 
     sub128(rc, rx);
 
-    a[i] = rc.low;
+    if (rc.low < q)
+        a[i] = rc.low;
+    else
+        a[i] = rc.low - q;
+
 }
 
 __global__ void poly_add(unsigned long long a[], const unsigned long long b[], unsigned long long q)

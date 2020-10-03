@@ -17,7 +17,7 @@ using std::vector;
 int main()
 {
     //unsigned N = atoi(argv[1]);
-    unsigned N = 1024 * 2;
+    unsigned N = 1024 * 8;
 
     int size_array = sizeof(unsigned long long) * N;
     int size = sizeof(unsigned long long);
@@ -46,7 +46,7 @@ int main()
     cout << "Psi Inverse = " << psiinv << endl;
 
     //generate parameters for barrett
-    unsigned int bit_length = q_bit + 1;
+    unsigned int bit_length = q_bit;
     uint128_t mu1 = uint128_t::exp2(2 * bit_length);
     mu1 = mu1 / q;
 

@@ -13,6 +13,9 @@ __device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& 
     mul64(rx.low, q, rx);
 
     sub128(a, rx);
+
+    if (a >= q)
+        a -= q;
 }
 
 template<unsigned l, unsigned N>
@@ -60,9 +63,6 @@ __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long
                 target_result -= q;
 
             shared_array[target_index] = target_result;
-
-            if (first_target_value < second_target_value)
-                first_target_value += q;
 
             if (first_target_value < second_target_value)
                 first_target_value += q;
@@ -132,9 +132,6 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
             if (first_target_value < second_target_value)
                 first_target_value += q;
 
-            if (first_target_value < second_target_value)
-                first_target_value += q;
-
             register uint128_t temp_storage = first_target_value - second_target_value;
 
             mul64(temp_storage.low, psiinv, temp_storage);
@@ -155,7 +152,7 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
     for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
     {
         register int global_tid = local_tid + iteration_num * 1024;
-        a[global_tid + blockIdx.x * (N / l)] = shared_array[global_tid] - q * (shared_array[global_tid] >= q);
+        a[global_tid + blockIdx.x * (N / l)] = shared_array[global_tid];
     }
 }
 
@@ -179,15 +176,12 @@ __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long q, un
     singleBarrett(temp_storage, q, mu, qbit);
     register unsigned long long second_target_value = temp_storage.low;
 
-    register unsigned long long target_resulttarget_result = first_target_value + second_target_value;
+    register unsigned long long target_result = first_target_value + second_target_value;
 
-    if (target_resulttarget_result >= q)
-        target_resulttarget_result -= q;
+    if (target_result >= q)
+        target_result -= q;
 
-    a[target_index] = target_resulttarget_result;
-
-    if (first_target_value < second_target_value)
-        first_target_value += q;
+    a[target_index] = target_result;
 
     if (first_target_value < second_target_value)
         first_target_value += q;
@@ -222,10 +216,7 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
     else
         target_result = (target_result >> 1);
 
-    a[target_index] = target_result - q * (target_result >= q);
-
-    if (first_target_value < second_target_value)
-        first_target_value += q;
+    a[target_index] = target_result;
 
     if (first_target_value < second_target_value)
         first_target_value += q;
@@ -242,7 +233,7 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
     else
         temp_storage_low = (temp_storage_low >> 1);
 
-    a[target_index + step] = temp_storage_low - q * (temp_storage_low >= q);
+    a[target_index + step] = temp_storage_low;
 }
 
 __host__ void forwardNTTdouble(unsigned long long* device_a, unsigned long long* device_b, unsigned N, cudaStream_t& stream1, cudaStream_t& stream2, unsigned long long q, unsigned long long mu, int bit_length, unsigned long long* psi_powers)
@@ -274,8 +265,8 @@ __host__ void forwardNTTdouble(unsigned long long* device_a, unsigned long long*
     }
     else if (N == 8192)
     {
-        CTBasedNTTInner<1, 8192> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
-        CTBasedNTTInner<1, 8192> << <16384 / 1024 / 2, 1024, 0, stream2 >> > (device_b, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream2 >> > (device_b, q, mu, bit_length, psi_powers);
 
         CTBasedNTTInnerSingle<2, 8192> << <2, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
         CTBasedNTTInnerSingle<2, 8192> << <2, 1024, 4096 * sizeof(unsigned long long), stream2 >> > (device_b, q, mu, bit_length, psi_powers);
