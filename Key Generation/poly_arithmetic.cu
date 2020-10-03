@@ -49,7 +49,7 @@ __global__ void poly_sub(unsigned long long a[], const unsigned long long b[], u
     a[i] = ra;
 }
 
-__host__ unsigned long long* full_poly_mul(unsigned long long* host_a, unsigned long long* host_b, unsigned long long* device_a, unsigned long long* device_b, unsigned N, cudaStream_t& stream1, cudaStream_t& stream2, unsigned long long q, unsigned long long mu, int bit_length, unsigned long long* psi_powers)
+__host__ unsigned long long* full_poly_mul(unsigned long long* host_a, unsigned long long* host_b, unsigned long long* device_a, unsigned long long* device_b, unsigned N, cudaStream_t& stream1, cudaStream_t& stream2, unsigned long long q, unsigned long long mu, int bit_length, unsigned long long* psi_powers, unsigned long long* psiinv_powers)
 {
     size_t array_size = sizeof(unsigned long long) * N;
     unsigned long long* result = (unsigned long long*)malloc(array_size);
@@ -60,6 +60,8 @@ __host__ unsigned long long* full_poly_mul(unsigned long long* host_a, unsigned 
     forwardNTTdouble(device_a, device_b, N, stream1, stream2, q, mu, bit_length, psi_powers);
 
     barrett << <N / 256, 256, 0, stream2 >> > (device_a, device_b, q, mu, bit_length);
+
+    inverseNTT(device_a, N, stream2, q, mu, bit_length, psiinv_powers);
 
     cudaMemcpyAsync(result, device_a, array_size, cudaMemcpyDeviceToHost, stream2);
 
