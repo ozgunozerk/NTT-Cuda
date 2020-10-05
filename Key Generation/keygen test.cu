@@ -14,7 +14,7 @@ using std::vector;
 
 #define check 0
 
-int main()
+int main2()
 {
     int n = 1024 * 4;
 

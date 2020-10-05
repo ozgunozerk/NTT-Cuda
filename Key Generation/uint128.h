@@ -311,7 +311,7 @@ __host__ __device__ __forceinline__ inline uint128_t operator%(uint128_t x, cons
 	return x;
 }
 
-__host__ __device__ __forceinline__ inline static uint128_t host64x2(const uint64_t& x, const uint64_t& y)
+__host__ inline static uint128_t host64x2(const uint64_t& x, const uint64_t& y)
 {
 	uint128_t z;
 
