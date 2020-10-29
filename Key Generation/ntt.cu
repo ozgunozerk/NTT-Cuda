@@ -14,8 +14,16 @@ __device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& 
 
     sub128(a, rx);
 
-    if (a >= q)
-        a -= q;
+    /*register unsigned long long b = a.low - q;
+
+    register bool bb = (b >> 63);
+
+    if (!bb)
+        a.low = b;*/
+
+    if (a.low >= q)
+        a.low -= q;
+
 }
 
 template<unsigned l, unsigned N>
@@ -124,10 +132,10 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
             if (target_result >= q)
                 target_result -= q;
 
-            if (target_result & 1)
-                shared_array[target_index] = (target_result >> 1) + q2;
-            else
-                shared_array[target_index] = (target_result >> 1);
+            //if (target_result & 1)
+                shared_array[target_index] = (target_result >> 1) + q2 * (target_result & 1);
+            /*else
+                shared_array[target_index] = (target_result >> 1);*/
 
             if (first_target_value < second_target_value)
                 first_target_value += q;
@@ -139,10 +147,10 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
             singleBarrett(temp_storage, q, mu, qbit);
 
             register unsigned long long temp_storage_low = temp_storage.low;
-            if (temp_storage_low & 1)
-                shared_array[target_index + step] = (temp_storage_low >> 1) + q2;
-            else
-                shared_array[target_index + step] = (temp_storage_low >> 1);
+            //if (temp_storage_low & 1)
+                shared_array[target_index + step] = (temp_storage_low >> 1) + q2 * (target_result & 1);
+            /*else
+                shared_array[target_index + step] = (temp_storage_low >> 1);*/
         }
 
         __syncthreads();
@@ -211,10 +219,10 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
 
     register unsigned long long q2 = (q + 1) >> 1;
 
-    if (target_result & 1)
-        target_result = (target_result >> 1) + q2;
-    else
-        target_result = (target_result >> 1);
+    //if (target_result & 1)
+        target_result = (target_result >> 1) + q2 * (target_result & 1);
+    /*else
+        target_result = (target_result >> 1);*/
 
     a[target_index] = target_result;
 
@@ -228,10 +236,10 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
     singleBarrett(temp_storage, q, mu, qbit);
 
     register unsigned long long temp_storage_low = temp_storage.low;
-    if (temp_storage_low & 1)
-        temp_storage_low = (temp_storage_low >> 1) + q2;
-    else
-        temp_storage_low = (temp_storage_low >> 1);
+    //if (temp_storage_low & 1)
+        temp_storage_low = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
+    /*else
+        temp_storage_low = (temp_storage_low >> 1);*/
 
     a[target_index + step] = temp_storage_low;
 }

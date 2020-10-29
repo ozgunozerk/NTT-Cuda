@@ -224,7 +224,7 @@ void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream)
 
     size = NBLKS * XSALSA20_BLOCKSZ;
 
-    printf("%llu\n", size);
+    //printf("%llu\n", size);
 
     memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);

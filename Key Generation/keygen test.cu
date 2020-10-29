@@ -14,21 +14,22 @@ using std::vector;
 
 #define check 0
 
-int main2()
+int main1()
 {
     int n = 1024 * 4;
 
     vector<unsigned long long> q = { 68719403009, 68719230977, 137438822401 };
-    vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };
+    //vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };
     vector<unsigned> q_bit_lengths = { 36, 36, 37 };
     unsigned q_amount = q.size();
 
+    // run operations on different q's with different streams
     cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
     for (int i = 0; i < q_amount; i++)
         cudaStreamCreate(&streams[i]);
     
     unsigned char* in;
-    cudaMalloc(&in, (sizeof(char) + sizeof(unsigned) + sizeof(unsigned long long)) * q_amount * n);
+    cudaMalloc(&in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n);
 
     unsigned long long** secret_key = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
     for (int i = 0; i < q_amount; i++)
@@ -36,6 +37,7 @@ int main2()
         cudaMalloc(&secret_key[i], sizeof(unsigned long long) * n);
     }
     
+    // we always have 2 public keys
     unsigned long long*** public_key = (unsigned long long***)malloc(sizeof(unsigned long long**) * 2);
     public_key[0] = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
     public_key[1] = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
@@ -46,46 +48,94 @@ int main2()
             cudaMalloc(&public_key[i][j], sizeof(unsigned long long) * n);
         }
     }
+
+    generate_random(in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n, streams[0]);
+
+    // convert random bytes to ternary distribution
+    // use different byte sequences for each element of the secret key
+    for (int i = 0; i < q_amount; i++)
+    {
+        ternary_dist(in + i * n, secret_key[i], n, streams[i], q[i]);
+    }
+
+    // convert random bytes to uniform distribution
+    // use different byte sequences for each q
+    for (int i = 0; i < q_amount; i++)
+    {
+        uniform_dist((unsigned long long*)(in + q_amount * n + i * n * sizeof(unsigned long long)), public_key[1][i], n, streams[i], q[i]);
+    }
+
+    // a temp array to store gaussian distribution values (e)
     unsigned long long** temp = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
     for (int i = 0; i < q_amount; i++)
     {
         cudaMalloc(&temp[i], sizeof(unsigned long long) * q_amount * n);
     }
 
-    generate_random(in, (sizeof(char) + sizeof(unsigned) + sizeof(unsigned long long)) * q_amount * n, streams[0]);
+    for (int i = 0; i < q_amount; i++)
+    {
+        gaussian_dist((unsigned*)(in + q_amount * n + q_amount * n * sizeof(unsigned long long)), temp[i], n, streams[i], q[i]);
+    }
+
+    vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };
+    vector<unsigned long long> psiinv_roots = { 60243494989, 37410665880, 5716440802 };
+    vector<unsigned long long> mu_array = {};
+
+    //generate mu parameters for barrett
+    for (int i = 0; i < q_amount; i++)
+    {
+        unsigned int bit_length = q_bit_lengths[i];
+        uint128_t mu1 = uint128_t::exp2(2 * bit_length);
+        mu1 = mu1 / q[i];
+        unsigned long long mu = mu1.low;
+
+        mu_array.push_back(mu);
+    }
+
+    //allocate memory for powers of psi root and psi inverse root
+    //and fill those arrays
+    unsigned long long** psi_table = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    unsigned long long** psiinv_table = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    for (int i = 0; i < q_amount; i++)
+    {
+        psi_table[i] = (unsigned long long*)malloc(sizeof(unsigned long long) * n);
+        psiinv_table[i] = (unsigned long long*)malloc(sizeof(unsigned long long) * n);
+
+        fillTablePsi128(psi_roots[i], q[i], psiinv_roots[i], psi_table[i], psiinv_table[i], n);
+    }
+
+    //allocate memory for powers of psi root and psi inverse root on device
+    //and copy their values from host to device
+    unsigned long long** psi_table_device = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    unsigned long long** psiinv_table_device = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
+    for (int i = 0; i < q_amount; i++)
+    {
+        cudaMalloc(&psi_table_device[i], sizeof(unsigned long long) * n);
+        cudaMalloc(&psiinv_table_device[i], sizeof(unsigned long long) * n);
+
+        cudaMemcpy(psi_table_device[i], psi_table[i], sizeof(unsigned long long) * n, cudaMemcpyHostToDevice);
+        cudaMemcpy(psiinv_table_device[i], psiinv_table[i], sizeof(unsigned long long) * n, cudaMemcpyHostToDevice);
+    }
 
     for (int i = 0; i < q_amount; i++)
     {
-        ternary_dist(in + i * n, secret_key[i], n, streams[i], q[i]);
+        cudaMemcpyAsync(public_key[0][i], public_key[1][i], sizeof(unsigned long long) * n, cudaMemcpyDeviceToDevice, streams[i]);
     }
 
-    unsigned long long* output;
-    cudaMallocHost(&output, sizeof(unsigned long long) * n);
-    cudaMemcpyAsync(output, secret_key[2], sizeof(unsigned long long) * n, cudaMemcpyDeviceToHost, streams[2]);
-
-    cudaDeviceSynchronize();
-
-    /*int c = 0, v = 0, b = 0;
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < q_amount; i++)
     {
-        if (output[i] == (q[2] - 1))
-            c++;
-        else if (output[i] == 0)
-            v++;
-        else if (output[i] == 1)
-            b++;
+        half_poly_mul_device(public_key[0][i], secret_key[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device[i], psiinv_table_device[i]);
+        poly_add_device(public_key[0][i], secret_key[i], n, streams[i], q[i]);
+        poly_negate_device(public_key[0][i], n, streams[i], q[i]);
     }
-
-    printf("%d, %d, %d\n", c, v, b);*/
-
 
     return 0;
 }
 
-int main3()
+int main()
 {
     //unsigned N = atoi(argv[1]);
-    unsigned N = 1024 * 8;
+    unsigned N = 1024 * 4;
 
     int size_array = sizeof(unsigned long long) * N;
     int size = sizeof(unsigned long long);
