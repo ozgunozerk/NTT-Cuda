@@ -10,20 +10,20 @@
 
 #include "salsa_common.h"
 
-__global__ void VecCrypt(unsigned char*, unsigned int, uint64_t, uint64_t, int);
+__global__ void VecCrypt(unsigned char* A, unsigned int N, uint64_t nblocks, uint64_t p_nonce, int blks_per_chunk);
 
-__global__ void convert_gaussian(unsigned*, unsigned long long*, unsigned long long);
+__global__ void convert_gaussian(unsigned* in, unsigned long long* out, unsigned long long q);
 
-__global__ void convert_range(unsigned long long*, unsigned long long*, unsigned long long);
+__global__ void convert_range(unsigned long long* in, unsigned long long* out, unsigned long long q);
 
-__global__ void convert_ternary(unsigned char*, unsigned long long*, unsigned long long);
+__global__ void convert_ternary(unsigned char* in, unsigned long long* out, unsigned long long q);
 
-void generate_random(unsigned char*, unsigned, cudaStream_t&);
+void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream);
 
-void gaussian_dist(unsigned*, unsigned long long*, unsigned, cudaStream_t&, unsigned long long);
+void gaussian_dist(unsigned* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q);
 
-void uniform_dist(unsigned long long*, unsigned long long*, unsigned, cudaStream_t&, unsigned long long);
+void uniform_dist(unsigned long long* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q);
 
-void ternary_dist(unsigned char*, unsigned long long*, unsigned, cudaStream_t&, unsigned long long);
+void ternary_dist(unsigned char* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q);
 
 #endif
