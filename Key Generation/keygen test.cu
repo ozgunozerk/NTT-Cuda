@@ -12,7 +12,7 @@ using std::vector;
 #include "poly_arithmetic.cuh"
 #include "distributions.cuh"
 
-#define check 0
+#define check 1
 
 int main1()
 {

@@ -14,13 +14,6 @@ __device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& 
 
     sub128(a, rx);
 
-    /*register unsigned long long b = a.low - q;
-
-    register bool bb = (b >> 63);
-
-    if (!bb)
-        a.low = b;*/
-
     if (a.low >= q)
         a.low -= q;
 
@@ -33,19 +26,19 @@ __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long
 
     extern __shared__ unsigned long long shared_array[];
 
-#pragma unroll
+    #pragma unroll
     for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
     {
         register int global_tid = local_tid + iteration_num * 1024;
         shared_array[global_tid] = a[global_tid + blockIdx.x * (N / l)];
     }
 
-#pragma unroll
+    #pragma unroll
     for (int length = l; length < N; length *= 2)
     {
         register int step = (N / length) / 2;
 
-#pragma unroll
+        #pragma unroll
         for (int iteration_num = 0; iteration_num < (N / 1024 / l) / 2; iteration_num++)
         {
 
@@ -67,13 +60,11 @@ __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long
 
             register unsigned long long target_result = first_target_value + second_target_value;
 
-            if (target_result >= q)
-                target_result -= q;
+            target_result -= q * (target_result >= q);
 
             shared_array[target_index] = target_result;
 
-            if (first_target_value < second_target_value)
-                first_target_value += q;
+            first_target_value += q * (first_target_value < second_target_value);
 
             shared_array[target_index + step] = first_target_value - second_target_value;
         }
@@ -81,7 +72,7 @@ __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long
         __syncthreads();
     }
 
-#pragma unroll
+    #pragma unroll
     for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
     {
         register int global_tid = local_tid + iteration_num * 1024;
@@ -99,7 +90,7 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 
     register unsigned long long q2 = (q + 1) >> 1;
 
-#pragma unroll
+    #pragma unroll
     for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
     {
         register int global_tid = local_tid + iteration_num * 1024;
@@ -108,12 +99,12 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 
     __syncthreads();
 
-#pragma unroll
+    #pragma unroll
     for (int length = (N / 2); length >= l; length /= 2)
     {
         register int step = (N / length) / 2;
 
-#pragma unroll
+        #pragma unroll
         for (int iteration_num = 0; iteration_num < (N / 1024 / l) / 2; iteration_num++)
         {
             register int global_tid = local_tid + iteration_num * 1024;
@@ -129,16 +120,11 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 
             register unsigned long long target_result = first_target_value + second_target_value;
 
-            if (target_result >= q)
-                target_result -= q;
+            target_result -= q * (target_result >= q);
 
-            //if (target_result & 1)
-                shared_array[target_index] = (target_result >> 1) + q2 * (target_result & 1);
-            /*else
-                shared_array[target_index] = (target_result >> 1);*/
+            shared_array[target_index] = (target_result >> 1) + q2 * (target_result & 1);
 
-            if (first_target_value < second_target_value)
-                first_target_value += q;
+            first_target_value += q * (first_target_value < second_target_value);
 
             register uint128_t temp_storage = first_target_value - second_target_value;
 
@@ -147,16 +133,14 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
             singleBarrett(temp_storage, q, mu, qbit);
 
             register unsigned long long temp_storage_low = temp_storage.low;
-            //if (temp_storage_low & 1)
-                shared_array[target_index + step] = (temp_storage_low >> 1) + q2 * (target_result & 1);
-            /*else
-                shared_array[target_index + step] = (temp_storage_low >> 1);*/
+
+            shared_array[target_index + step] = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
         }
 
         __syncthreads();
     }
 
-#pragma unroll
+    #pragma unroll
     for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
     {
         register int global_tid = local_tid + iteration_num * 1024;
@@ -186,13 +170,11 @@ __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long q, un
 
     register unsigned long long target_result = first_target_value + second_target_value;
 
-    if (target_result >= q)
-        target_result -= q;
+    target_result -= q * (target_result >= q);
 
     a[target_index] = target_result;
 
-    if (first_target_value < second_target_value)
-        first_target_value += q;
+    first_target_value += q * (first_target_value < second_target_value);
 
     a[target_index + step] = first_target_value - second_target_value;
 }
@@ -214,20 +196,15 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
 
     register unsigned long long target_result = first_target_value + second_target_value;
 
-    if (target_result >= q)
-        target_result -= q;
+    target_result -= q * (target_result >= q);
 
     register unsigned long long q2 = (q + 1) >> 1;
 
-    //if (target_result & 1)
-        target_result = (target_result >> 1) + q2 * (target_result & 1);
-    /*else
-        target_result = (target_result >> 1);*/
+    target_result = (target_result >> 1) + q2 * (target_result & 1);
 
     a[target_index] = target_result;
 
-    if (first_target_value < second_target_value)
-        first_target_value += q;
+    first_target_value += q * (first_target_value < second_target_value);
 
     register uint128_t temp_storage = first_target_value - second_target_value;
 
@@ -236,10 +213,8 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
     singleBarrett(temp_storage, q, mu, qbit);
 
     register unsigned long long temp_storage_low = temp_storage.low;
-    //if (temp_storage_low & 1)
-        temp_storage_low = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
-    /*else
-        temp_storage_low = (temp_storage_low >> 1);*/
+
+    temp_storage_low = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
 
     a[target_index + step] = temp_storage_low;
 }
