@@ -20,6 +20,8 @@ __global__ void convert_ternary(unsigned char* in, unsigned long long* out, unsi
 
 void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream);
 
+void generate_random_default(unsigned char* a, unsigned n);
+
 void gaussian_dist(unsigned* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q);
 
 void uniform_dist(unsigned long long* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q);

@@ -243,6 +243,37 @@ void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream)
     VecCrypt << <blocksPerGrid, threadsPerBlock, 0, stream >> > (d_A, N, size, v_nonce, 1);
 }
 
+void generate_random_default(unsigned char* a, unsigned n)
+{
+    unsigned char* d_A = a;
+
+    unsigned int NBLKS = n / 64, N;
+    int threadsPerBlock, blocksPerGrid;
+    size_t size, i;
+    unsigned char k[32];
+    uint64_t v_nonce;
+
+    size = NBLKS * XSALSA20_BLOCKSZ;
+
+    //printf("%llu\n", size);
+
+    memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
+    memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
+
+    cudaMemcpyToSymbol(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbol(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
+    v_nonce = load_littleendian64(h_nonce);
+    threadsPerBlock = THREADS_PER_BLOCK;
+
+    cudaMemset(d_A, 0, size);
+
+    N = NBLKS;
+
+    blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    VecCrypt << <blocksPerGrid, threadsPerBlock, 0, 0 >> > (d_A, N, size, v_nonce, 1);
+}
+
 void gaussian_dist(unsigned* in, unsigned long long* out, unsigned n, cudaStream_t& stream, unsigned long long q)
 {
     int convert_block_amount = n / convertBlockSize;

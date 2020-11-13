@@ -94,8 +94,20 @@ __global__ void poly_add(unsigned long long a[], const unsigned long long b[], u
 
     register unsigned long long ra = a[i] + b[i];
 
-    if (ra > (q << 2))
-        ra -= (q << 1);
+    if (ra > q)
+        ra -= q;
+
+    a[i] = ra;
+}
+
+__global__ void poly_add_integer(unsigned long long a[], unsigned long long b, unsigned long long q)
+{
+    register int i = blockIdx.x * 256 + threadIdx.x;
+
+    register unsigned long long ra = a[i] + b;
+
+    if (ra > q)
+        ra -= q;
 
     a[i] = ra;
 }
@@ -108,9 +120,57 @@ __global__ void poly_sub(unsigned long long a[], const unsigned long long b[], u
     register unsigned long long rb = b[i];
 
     if (ra < rb)
-        ra += (q << 1);
+        ra += q;
 
     a[i] = ra;
+}
+
+__global__ void divide_and_round_q_last_inplace_loop(unsigned long long* input_poly, unsigned long long* rns_poly_minus1, unsigned long long base_q_i, 
+    unsigned long long half_mod, unsigned long long inv_q_last_mod_q_i, unsigned long long base_q_i_mu, int base_q_i_qbit)
+{
+    register int i = blockIdx.x * 256 + threadIdx.x;
+
+    unsigned long long temp_poly_i = rns_poly_minus1[i] % base_q_i;
+
+    if (temp_poly_i < half_mod)
+        temp_poly_i += half_mod;
+
+    temp_poly_i -= half_mod;
+
+    if (input_poly[i] < temp_poly_i)
+        input_poly[i] += base_q_i;
+
+    input_poly[i] -= temp_poly_i;
+
+    uint128_t mult;
+    mul64(input_poly[i], inv_q_last_mod_q_i, mult);
+    singleBarrett(mult, base_q_i, base_q_i_mu, base_q_i_qbit);
+
+    input_poly[i] = mult.low;
+}
+
+__global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
+    unsigned long long* q_array_device, unsigned q_amount, unsigned N) // q_mod_t is taken as 1
+{
+    register int j = blockIdx.x * 256 + threadIdx.x;
+
+    if (j >= m_len)
+        return;
+
+    /*            numerator = (m_poly[j] * self.q_mod_t) + ((self.t + 1) >> 1)
+            fix = numerator // self.t
+
+            for i in range(len(self.q) - 1):
+                c0[i][j] = (c0[i][j] + ((m_poly[j] * self.qi_div_t_rns[i]) + fix)) % self.q[i]*/
+
+    unsigned long long numerator = m_poly[j] + ((t + 1) >> 1);
+    unsigned long long fix = numerator / t;
+
+#pragma unroll
+    for (int i = 0; i < q_amount - 1; i++)
+    {
+        c0[j + i * N] = (c0[j + i * N] + ((m_poly[j] * qi_div_t_rns_array_device[i]) + fix)) % q_array_device[i];
+    }
 }
 
 // c0[0] is given as the resulting poly because it is unused now
@@ -158,11 +218,26 @@ __global__ void dec_round_kernel(unsigned long long* input_poly, unsigned long l
         result_poly[i] = (input_poly[i] + (gamma - input_poly[i + n])) & mask;
     else
         result_poly[i] = (input_poly[i] - input_poly[i + n]) & mask;
+
+    //printf("%llu\n", result_poly[i]);
 }
 
 __host__ void dec_round(unsigned long long* input_poly, unsigned long long* result_poly, unsigned long long t, unsigned long long gamma, unsigned long long gamma_div_2, unsigned N, cudaStream_t& stream)
 {
     dec_round_kernel << <N / 256, 256, 0, stream >> > (input_poly, result_poly, t, gamma, gamma_div_2, N);
+}
+
+#include <iostream>
+using namespace std;
+
+void print_array_ar(unsigned long long a[])
+{
+    cout << "[";
+    for (int i = 0; i < 4096; i++)
+    {
+        cout << a[i] << ", ";
+    }
+    cout << "]";
 }
 
 __host__ void fast_convert_array_kernels(unsigned long long* input_poly, unsigned long long* result_poly, unsigned long long t, unsigned long long* base_change_matrix_device, unsigned q_amount, unsigned long long gamma, int gamma_bit_length, unsigned long long mu_gamma, cudaStream_t& stream1, cudaStream_t& stream2, unsigned N)
@@ -238,4 +313,14 @@ __global__ void poly_negate(unsigned long long* a, unsigned long long q)
 __host__ void poly_negate_device(unsigned long long* device_a, unsigned N, cudaStream_t& stream, unsigned long long q)
 {
     poly_negate << <N / 256, 256, 0, stream >> > (device_a, q);
+}
+
+__host__ void poly_add_integer_device(unsigned long long* device_a, unsigned long long b, unsigned N, cudaStream_t& stream, unsigned long long q)
+{
+    poly_add_integer << <N / 256, 256, 0, stream >> > (device_a, b, q);
+}
+
+__host__ void poly_add_integer_device_default(unsigned long long* device_a, unsigned long long b, unsigned N, unsigned long long q)
+{
+    poly_add_integer << <N / 256, 256, 0, 0 >> > (device_a, b, q);
 }
