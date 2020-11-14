@@ -15,17 +15,20 @@ using std::vector;
 void divide_and_round_q_last_inplace(unsigned long long* poly, unsigned N, cudaStream_t streams[], vector<unsigned long long> q, vector<unsigned> q_bit_lengths, 
     vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q)
 {
-    unsigned q_amount = q.size();
+    unsigned q_amount = q.size();  // getting how many q's we have
 
-    unsigned long long last_modulus = q[q_amount - 1];
-    unsigned long long half_last_modulus = last_modulus >> 1;
+    unsigned long long last_modulus = q[q_amount - 1];  // get the last q from the array
+    unsigned long long half_last_modulus = last_modulus >> 1;  // divide it by half
 
-    poly_add_integer_device_default(poly + N * (q_amount - 1), half_last_modulus, N, last_modulus);
+    poly_add_integer_device_default(poly + N * (q_amount - 1), half_last_modulus, N, last_modulus);  
+    // poly + N * (q_amount - 1) = getting the to the last q in the flattened array
+    // adding half_last_modulus to it, in mod last_modulus
+    // N is required for calling the kernel with optimal thread amount
 
-    for (int i = 0; i < q_amount - 1; i++)
+    for (int i = 0; i < q_amount - 1; i++)  
     {
-        unsigned long long half_mod = half_last_modulus % q[i];
-        divide_and_round_q_last_inplace_loop << <N / 256, 256, 0, streams[i] >> > (poly + N * i, poly + N * (q_amount - 1), q[i], half_mod, inv_q_last_mod_q[i], mu_array[i], q_bit_lengths[i]);
+        unsigned long long half_mod = half_last_modulus % q[i];  // getting the half_last_modulus' mod in respect to every other q[x]
+        divide_and_round_q_last_inplace_loop << <N / 256, 256, 0, streams[i] >> > (poly + N * i, poly + N * (q_amount - 1), q[i], half_mod, inv_q_last_mod_q[i], mu_array[i], q_bit_lengths[i]);  // too long to explain, inspect the comments in the function
     }
 }
 
@@ -34,22 +37,28 @@ void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned lon
     vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, unsigned long long** psi_table_device, unsigned long long** psiinv_table_device,
     unsigned long long* m_poly_device, unsigned long long m_len, unsigned long long* qi_div_t_rns_array_device, unsigned long long* q_array_device, unsigned t)
 {
-    unsigned q_amount = q.size();
+    unsigned q_amount = q.size();  // getting how many q's do we have
 
-    generate_random_default(in, sizeof(unsigned long long) * q_amount * N + sizeof(unsigned) * N * 2);
+    generate_random_default(in, sizeof(unsigned long long) * q_amount * N + sizeof(unsigned) * N * 2);  // default is for default stream: this is for synchronization issues
+    // otherwise ternary distributions may run before this function, which is UNACCEPTABLE
 
     for (int i = 0; i < q_amount; i++)
     {
-        ternary_dist(in + i * N, c0 + i * N, N, streams[i], q[i]); // generate ternary dist poly directly into c0 and c1. c0 = c1, 
-        ternary_dist(in + i * N, c1 + i * N, N, streams[i], q[i]);
+        ternary_dist(in + i * N, c0 + i * N, N, streams[i], q[i]);  // generate ternary dist poly directly into c0 and c1. c0 = c1, 
+        ternary_dist(in + i * N, c1 + i * N, N, streams[i], q[i]);  // its represented by 'u' 
+        // for ease of operations and memory allocation, we have generated 2 of them (identical), since we override some stuff in polynomial multiplication.
     }
 
     for (int i = 0; i < q_amount; i++)
     {
-        gaussian_dist((unsigned*)(in + q_amount * N), e[0][i], N, streams[i], q[i]);
-        gaussian_dist((unsigned*)(in + q_amount * N), e[1][i], N, streams[i], q[i]);
+        gaussian_dist((unsigned*)(in + q_amount * N), e[0][i], N, streams[i], q[i]);  // this is again for generation ternary distribution, although it's name is gaussian
+        // e0
+
+        gaussian_dist((unsigned*)(in + q_amount * N), e[1][i], N, streams[i], q[i]);  // i was joking this is for gaussian
+        // e1
     }
 
+    // CAN should we delete the comment below?
     /*c0 = self.pk[0] * u
         c1 = self.pk[1] * u
         c0 = c0 + e1
@@ -57,27 +66,28 @@ void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned lon
 
     for (int i = 0; i < q_amount; i++)
     {
-        half_poly_mul_device(c0 + i * N, public_key[0][i], N, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device[i], psiinv_table_device[i]);
+        // multiply each public key with 'u'(c0 and c1). Remember that c0 and c1 are identical
+        half_poly_mul_device(c0 + i * N, public_key[0][i], N, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device[i], psiinv_table_device[i]);  
         half_poly_mul_device(c1 + i * N, public_key[1][i], N, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device[i], psiinv_table_device[i]);
     }
 
     for (int i = 0; i < q_amount; i++)
     {
-        poly_add_device(c0 + i * N, e[0][i], N, streams[i], q[i]);
-        poly_add_device(c1 + i * N, e[1][i], N, streams[i], q[i]);
+        poly_add_device(c0 + i * N, e[0][i], N, streams[i], q[i]);  // add e0 to publickey[0]
+        poly_add_device(c1 + i * N, e[1][i], N, streams[i], q[i]);  // add e1 to publickey[1]
     }
 
-    divide_and_round_q_last_inplace(c0, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q);
+    divide_and_round_q_last_inplace(c0, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q);  // do that complicated stuff for each public key
     divide_and_round_q_last_inplace(c1, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q);
 
-    weird_m_stuff << <N / 256, 256, 0, 0 >> > (m_len, m_poly_device, c0, t, qi_div_t_rns_array_device, q_array_device, q_amount, N);
+    weird_m_stuff << <N / 256, 256, 0, 0 >> > (m_len, m_poly_device, c0, t, qi_div_t_rns_array_device, q_array_device, q_amount, N);  // look at the comments in the function
 }
 
 int main()
 {
     int n = 1024 * 4;
 
-    vector<unsigned long long> q = { 68719403009, 68719230977, 137438822401 };
+    vector<unsigned long long> q = { 68719403009, 68719230977, 137438822401 };  // the first value is 68719403009 because its bigger than 68719403008
     unsigned long long q_array[] = { 68719403009, 68719230977, 137438822401 };
     vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };
     vector<unsigned long long> psiinv_roots = { 60243494989, 37410665880, 5716440802 };
@@ -91,7 +101,7 @@ int main()
 
     cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
     for (int i = 0; i < q_amount; i++)
-        cudaStreamCreate(&streams[i]);
+        cudaStreamCreate(&streams[i]);  // create streams for parallelism
 
     unsigned long long* q_array_device;
     cudaMalloc(&q_array_device, q_amount * sizeof(unsigned long long));
@@ -101,10 +111,10 @@ int main()
     cudaMalloc(&qi_div_t_rns_array_device, (q_amount - 1)* sizeof(unsigned long long));
     cudaMemcpy(qi_div_t_rns_array_device, qi_div_t_rns_array, (q_amount - 1) * sizeof(unsigned long long), cudaMemcpyHostToDevice);
 
-    unsigned long long m = 100;
-    unsigned long long m_len = log2(m) + 1;
+    unsigned long long m = 100;  // our message to encrypt
+    unsigned long long m_len = log2(m) + 1;  // length of m
 
-    unsigned long long t = 1024;
+    unsigned long long t = 1024;  // mathematical stuff that is beyond our comprehension
 
     //generate mu parameters for barrett
     for (int i = 0; i < q_amount; i++)

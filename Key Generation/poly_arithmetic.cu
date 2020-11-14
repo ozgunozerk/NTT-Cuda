@@ -128,25 +128,37 @@ __global__ void poly_sub(unsigned long long a[], const unsigned long long b[], u
 __global__ void divide_and_round_q_last_inplace_loop(unsigned long long* input_poly, unsigned long long* rns_poly_minus1, unsigned long long base_q_i, 
     unsigned long long half_mod, unsigned long long inv_q_last_mod_q_i, unsigned long long base_q_i_mu, int base_q_i_qbit)
 {
-    register int i = blockIdx.x * 256 + threadIdx.x;
+    register int i = blockIdx.x * 256 + threadIdx.x;  // get an ID to each thread
 
-    unsigned long long temp_poly_i = rns_poly_minus1[i] % base_q_i;
-
-    if (temp_poly_i < half_mod)
+    unsigned long long temp_poly_i = rns_poly_minus1[i] % base_q_i;  
+    // get the last polynomials respective index with = rns_poly_minus1[i] 
+    // get the the base q of the polynomial (one of other polynomials other than the last one) = base_q_i 
+    // store the result in a variable = temp_poly_i
+     
+    if (temp_poly_i < half_mod)  // mod operation for safe substraction on line 139
         temp_poly_i += half_mod;
 
-    temp_poly_i -= half_mod;
+    temp_poly_i -= half_mod; // substract half_modulus from the index of last polynomial
 
-    if (input_poly[i] < temp_poly_i)
-        input_poly[i] += base_q_i;
+    if (input_poly[i] < temp_poly_i)  // now we gonna substract that computed value from other polynomials
+        input_poly[i] += base_q_i;  // so we have to ensure substraction safety (underflow)
 
-    input_poly[i] -= temp_poly_i;
+    input_poly[i] -= temp_poly_i;  
+    // substract the last_polynomials respective calculated value = temp_poly_i
+    // from the respective index of the other polynomial = input_poly[i]
 
-    uint128_t mult;
-    mul64(input_poly[i], inv_q_last_mod_q_i, mult);
+    uint128_t mult;  
+    mul64(input_poly[i], inv_q_last_mod_q_i, mult);  
+    // multiply the input_poly[i] with:
+    // inverse of last polynomials q
+    // to the mod of respective polynomials q
+    // which is: inv_q_last_mod_q_i 
+    // :)
+    
     singleBarrett(mult, base_q_i, base_q_i_mu, base_q_i_qbit);
+    // we might have fucked up, so apply mod again
 
-    input_poly[i] = mult.low;
+    input_poly[i] = mult.low;  // store the result in the given input_polynomial
 }
 
 __global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
@@ -154,22 +166,31 @@ __global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_po
 {
     register int j = blockIdx.x * 256 + threadIdx.x;
 
-    if (j >= m_len)
-        return;
+    if (j >= m_len)  // m is the message, it might be less than N,
+        return;  // in this case we want to deal with only m_bits of the polynomials, so we are going to make other threads wait
 
-    /*            numerator = (m_poly[j] * self.q_mod_t) + ((self.t + 1) >> 1)
+
+    // CAN should we delete this comment below?
+    /*      numerator = (m_poly[j] * self.q_mod_t) + ((self.t + 1) >> 1)
             fix = numerator // self.t
 
             for i in range(len(self.q) - 1):
                 c0[i][j] = (c0[i][j] + ((m_poly[j] * self.qi_div_t_rns[i]) + fix)) % self.q[i]*/
 
-    unsigned long long numerator = m_poly[j] + ((t + 1) >> 1);
-    unsigned long long fix = numerator / t;
+    // second reminder: q mod t is assumed 1, multiplying the polynomial with that value becomes unnecessary. 
+    // if that's not the case though, include that operation in right here
+    unsigned long long numerator = m_poly[j] + ((t + 1) >> 1);  // add t to 1, then divide it by 2, add that value to each element of the polynomial (only for m bits)
+    unsigned long long fix = numerator / t;  // divide that value with t, (we assume t is a perfect power of 2, so we can apply shift instead of division with log2t)
 
 #pragma unroll
-    for (int i = 0; i < q_amount - 1; i++)
+    for (int i = 0; i < q_amount - 1; i++)  // for every polynomial, except the last one
     {
         c0[j + i * N] = (c0[j + i * N] + ((m_poly[j] * qi_div_t_rns_array_device[i]) + fix)) % q_array_device[i];
+        // c0 is a flattened array, we need i*N for reaching the polynomial we want to, then [j] for reaching to the respective element in the polynomial
+        // qi_div_t_rns_array_device is storing the rns representation of each qi, divided by t,
+        // to be more specific, it's storing the result of base_q value, divided by t
+        // but its represented as rns, so its value is computed by, [base_q / t] mod of each qi 
+        // qi's are the q's in the base_q
     }
 }
 
