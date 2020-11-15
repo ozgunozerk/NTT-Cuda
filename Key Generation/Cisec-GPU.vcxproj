@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="decryption.cu" />
+    <CudaCompile Include="demo.cu" />
     <CudaCompile Include="distributions.cu" />
     <CudaCompile Include="ntt.cu" />
     <CudaCompile Include="poly_arithmetic.cu" />

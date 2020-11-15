@@ -96,8 +96,6 @@ int main()
     vector<unsigned long long> mu_array = {};
     unsigned q_amount = q.size();
 
-    cout << q_amount << "q amount" << endl;
-
     vector<unsigned long long> punctured_q = {};
     vector<unsigned long long> inv_punctured_q = { 26179219651, 42540076863 };
 

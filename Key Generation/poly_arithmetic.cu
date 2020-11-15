@@ -136,7 +136,7 @@ __global__ void divide_and_round_q_last_inplace_loop(unsigned long long* input_p
     // store the result in a variable = temp_poly_i
      
     if (temp_poly_i < half_mod)  // mod operation for safe substraction on line 139
-        temp_poly_i += half_mod;
+        temp_poly_i += base_q_i;
 
     temp_poly_i -= half_mod; // substract half_modulus from the index of last polynomial
 
@@ -171,6 +171,7 @@ __global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_po
 
 
     // CAN should we delete this comment below?
+    // olur
     /*      numerator = (m_poly[j] * self.q_mod_t) + ((self.t + 1) >> 1)
             fix = numerator // self.t
 

@@ -59,6 +59,7 @@ void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned lon
     }
 
     // CAN should we delete the comment below?
+    // olur
     /*c0 = self.pk[0] * u
         c1 = self.pk[1] * u
         c0 = c0 + e1
