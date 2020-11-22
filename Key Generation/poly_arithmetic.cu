@@ -236,10 +236,10 @@ __global__ void dec_round_kernel(unsigned long long* input_poly, unsigned long l
     register int i = blockIdx.x * 256 + threadIdx.x;
     register unsigned long long mask = t - 1;
 
-    if (input_poly[i + n] > gamma_div_2)
-        result_poly[i] = (input_poly[i] + (gamma - input_poly[i + n])) & mask;
+    if (input_poly[i + n] > gamma_div_2)  // poly(g) >= (g >> 1) ?? buraya kesin bakalim, ferhat >= demis, biz > yapmisiz
+        result_poly[i] = (input_poly[i] + (gamma - input_poly[i + n])) & mask;  // extra stuff: add gamma to the polynomial
     else
-        result_poly[i] = (input_poly[i] - input_poly[i + n]) & mask;
+        result_poly[i] = (input_poly[i] - input_poly[i + n]) & mask;  // regular stuff: don't add gamma to the polynomial, rest is same
 
     //printf("%llu\n", result_poly[i]);
 }

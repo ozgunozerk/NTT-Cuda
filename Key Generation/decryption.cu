@@ -12,7 +12,7 @@ using std::vector;
 
 #include "poly_arithmetic.cuh"
 
-void print_array(unsigned long long a[])
+void print_array(unsigned long long a[])  // for debugging and development, will get rid of it in release 
 {
     cout << "[";
     for (int i = 0; i < 4096; i++)
@@ -30,11 +30,11 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
     vector<unsigned>& output_base_bit_lengths, vector<unsigned long long>& neg_inv_q_mod_t_gamma,
     unsigned long long gamma_div_2) // hehehehe
 {
-    cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
+    cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);  // creating many streams for concurrency
     for (int i = 0; i < q_amount; i++)
         cudaStreamCreate(&streams[i]);
 
-    for (int i = 0; i < q_amount; i++)
+    for (int i = 0; i < q_amount; i++)  // since we are dealing with rns polinomials, we have to do operations for each polynomial in the rns polynomial
     {
         half_poly_mul_device(c1 + i * n, secret_key[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device[i], psiinv_table_device[i]);
         // c1 = c1 * sk
@@ -43,35 +43,38 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
         // c1 = c1 + c0
     }
 
-    vector<unsigned long long> prod_t_gamma_mod_q = { 37067052033, 64547873793 };
+    vector<unsigned long long> prod_t_gamma_mod_q = { 37067052033, 64547873793 };  // t x g mod q[k], store this pre-computed values, we will use them :)
 
     for (int i = 0; i < q_amount; i++)
     {
-        poly_mul_int(c1 + i * n, prod_t_gamma_mod_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);
-        // c1 = c1 * prod_t_gamma_mod_q
+        poly_mul_int(c1 + i * n, prod_t_gamma_mod_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);  // c1 = c1 * prod_t_gamma_mod_q
+        // I said we gonna use that pre-computed values, eh?
     }
 
+    // **************************
     // start of fast convert array
 
-    // c / punc_q mod q
-    for (int i = 0; i < q_amount; i++)
+    // c / punc_q mod q  ??? bu ne kanka
+    for (int i = 0; i < q_amount; i++)  // do this for every polynomial in our rns polynomial
     {
-        poly_mul_int(c1 + i * n, inv_punctured_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);
+        poly_mul_int(c1 + i * n, inv_punctured_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);  
+        // ( X(prod)(punc)[i]^(-1) mod X[i] ) x ( poly[i] ) 
     }
 
-    cudaStreamSynchronize(streams[q_amount - 1]);
+    cudaStreamSynchronize(streams[q_amount - 1]);  // wait for the above operation to complete
 
-    // multiply coeff[k] with base change matrix, add them together and split into 2 poly
+    // multiply coeff[k] with base change matrix, add them together and split into 2 poly  -> coeff[k] nedir?
     fast_convert_array_kernels(c1, c0, t, base_change_matrix_device, q_amount, gamma,
         output_base_bit_lengths[1], mu_gamma, streams[0], streams[1], n);
 
     // end of fast convert array
+    // **************************
 
-    // multiply polies by neg_inv_q_mod_t_gamma
-    poly_mul_int_t(c0, neg_inv_q_mod_t_gamma[0], n, streams[0], t);
-    poly_mul_int(c0 + n, neg_inv_q_mod_t_gamma[1], n, streams[1], gamma, mu_gamma, output_base_bit_lengths[1]);
+    // multiply polynomials by neg_inv_q_mod_t_gamma
+    poly_mul_int_t(c0, neg_inv_q_mod_t_gamma[0], n, streams[0], t);  // bunun icinde mod_t cagriliyor, onu aciklamak lazim, ben anlayamadim
+    poly_mul_int(c0 + n, neg_inv_q_mod_t_gamma[1], n, streams[1], gamma, mu_gamma, output_base_bit_lengths[1]);  // bunun icinde de barrett_int cagriliyor, ayni sekilde anlayamadim xD aferin bana
 
-    //round
+    //round (but don't underestimate it, it's complex as hell :)
     dec_round(c0, c0 + n * (q_amount - 1), t, gamma, gamma_div_2, n, streams[1]);
 }
 
