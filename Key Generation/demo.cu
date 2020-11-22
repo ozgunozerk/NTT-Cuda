@@ -313,7 +313,9 @@ int main()
         m_poly[i] = 0;
     }
 
-    m_poly[2] = 1; m_poly[5] = 1; m_poly[6] = 1;
+    m_poly[2] = 1; m_poly[5] = 5; m_poly[6] = 1; m_poly[1] = 1; m_poly[95] = 1;
+    randomArray128(m_poly, 4096, t - 1);
+    m_len = 4096;
 
     unsigned long long* m_poly_device;
     cudaMalloc(&m_poly_device, 4096 * sizeof(unsigned long long));
@@ -394,12 +396,18 @@ int main()
 
     cudaDeviceSynchronize();
 
-    cout << "[";
+    for (int i = 0; i < 4096; i++)
+    {
+        if (m_poly[i] != plain_poly[i])
+            cout << "Error" << endl;
+    }
+
+    /*cout << "[";
     for (int i = 0; i < n; i++)
     {
         cout << plain_poly[i] << ", ";
     }
-    cout << "]uyhug";
+    cout << "]";*/
 
     return 0;
 }
