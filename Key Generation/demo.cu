@@ -21,10 +21,8 @@ void print_array(unsigned long long a[])
 }
 
 void divide_and_round_q_last_inplace(unsigned long long* poly, unsigned N, cudaStream_t streams[], vector<unsigned long long> q, vector<unsigned> q_bit_lengths,
-    vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q)
+    vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, int q_amount)
 {
-    unsigned q_amount = q.size();  // getting how many q's we have
-
     unsigned long long last_modulus = q[q_amount - 1];  // get the last q from the array
     unsigned long long half_last_modulus = last_modulus >> 1;  // divide it by 2
 
@@ -40,13 +38,11 @@ void divide_and_round_q_last_inplace(unsigned long long* poly, unsigned N, cudaS
     }
 }
 
-void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned long long*** public_key, unsigned char* in, unsigned long long** u, unsigned long long*** e, unsigned N,
+void encryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned long long*** public_key, unsigned char* in, unsigned long long** u, unsigned long long*** e, unsigned N,
     cudaStream_t streams[], vector<unsigned long long> q, vector<unsigned> q_bit_lengths,
     vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, unsigned long long** psi_table_device, unsigned long long** psiinv_table_device,
-    unsigned long long* m_poly_device, unsigned long long m_len, unsigned long long* qi_div_t_rns_array_device, unsigned long long* q_array_device, unsigned t)
+    unsigned long long* m_poly_device, unsigned long long* qi_div_t_rns_array_device, unsigned long long* q_array_device, unsigned t, int q_amount)
 {
-    unsigned q_amount = q.size();  // getting how many q's do we have
-
     generate_random_default(in, sizeof(char) * N + sizeof(unsigned) * N * 2);  // default is for default stream: this is for synchronization issues
     // otherwise ternary distributions may run before this function, which is UNACCEPTABLE
 
@@ -66,13 +62,6 @@ void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned lon
         // e1
     }
 
-    // CAN should we delete the comment below?
-    // olur
-    /*c0 = self.pk[0] * u
-        c1 = self.pk[1] * u
-        c0 = c0 + e1
-        c1 = c1 + e2*/
-
     for (int i = 0; i < q_amount; i++)
     {
         // multiply each public key with 'u'(c0 and c1). Remember that c0 and c1 are identical
@@ -86,11 +75,10 @@ void rns_encryption(unsigned long long* c0, unsigned long long* c1, unsigned lon
         poly_add_device(c1 + i * N, e[1][i], N, streams[i], q[i]);  // add e1 to publickey[1]
     }
 
-    divide_and_round_q_last_inplace(c0, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q);  // do that complicated stuff for each public key
-    divide_and_round_q_last_inplace(c1, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q);
+    divide_and_round_q_last_inplace(c0, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
+    divide_and_round_q_last_inplace(c1, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);
 
-    weird_m_stuff << <N / 256, 256, 0, 0 >> > (m_len, m_poly_device, c0, t, qi_div_t_rns_array_device, q_array_device, q_amount, N);  // look at the comments in the function
-
+    weird_m_stuff << <N / 256, 256, 0, 0 >> > (m_poly_device, c0, t, qi_div_t_rns_array_device, q_array_device, q_amount, N);  // look at the comments in the function
 }
 
 void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned long long** secret_key,
@@ -130,7 +118,7 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
         poly_mul_int(c1 + i * n, inv_punctured_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);
     }
 
-    cudaStreamSynchronize(streams[q_amount - 1]);
+    //cudaStreamSynchronize(streams[q_amount - 1]);
 
     // multiply coeff[k] with base change matrix, add them together and split into 2 poly
     fast_convert_array_kernels(c1, c0, t, base_change_matrix_device, q_amount, gamma,
@@ -144,6 +132,53 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
 
     //round
     dec_round(c0, c0 + n * (q_amount - 1), t, gamma, gamma_div_2, n, streams[1]);
+}
+
+void keygen_rns(unsigned char in[], int q_amount, vector<unsigned long long> q, unsigned n, unsigned long long** secret_key, unsigned long long*** public_key,
+    cudaStream_t* streams, unsigned long long** temp, vector<unsigned long long> mu_array, vector<unsigned> q_bit_lengths, 
+    unsigned long long** psi_table_device, unsigned long long** psiinv_table_device)
+{
+    generate_random_default(in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n);
+
+    // convert random bytes to ternary distribution
+    // use same byte sequence for each element of the secret key
+    for (int i = 0; i < q_amount; i++)
+    {
+        ternary_dist(in, secret_key[i], n, streams[i], q[i]);
+    }
+
+    // convert random bytes to uniform distribution
+    // use different byte sequences for each q
+    for (int i = 0; i < q_amount; i++)
+    {
+        uniform_dist((unsigned long long*)(in + q_amount * n + i * n * sizeof(unsigned long long)), public_key[1][i], n, streams[i], q[i]);
+    }
+
+    for (int i = 0; i < q_amount; i++)
+    {
+        gaussian_dist((unsigned*)(in + q_amount * n + q_amount * n * sizeof(unsigned long long)), temp[i], n, streams[i], q[i]);
+    }
+
+    forwardNTT(secret_key[0], n, streams[0], q[0], mu_array[0], q_bit_lengths[0], psi_table_device[0]);
+    forwardNTT(secret_key[1], n, streams[1], q[1], mu_array[1], q_bit_lengths[1], psi_table_device[1]);
+    forwardNTT(secret_key[2], n, streams[2], q[2], mu_array[2], q_bit_lengths[2], psi_table_device[2]);
+
+    for (int i = 0; i < q_amount; i++)
+    {
+        cudaMemcpyAsync(public_key[0][i], public_key[1][i], sizeof(unsigned long long) * n, cudaMemcpyDeviceToDevice, streams[i]);
+    }
+
+    for (int i = 0; i < q_amount; i++)
+    {
+        barrett << <n / 256, 256, 0, streams[i] >> > (public_key[0][i], secret_key[i], q[i], mu_array[i], q_bit_lengths[i]);
+        inverseNTT(public_key[0][i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psiinv_table_device[i]);
+        poly_add_device(public_key[0][i], temp[i], n, streams[i], q[i]);
+        poly_negate_device(public_key[0][i], n, streams[i], q[i]);
+    }
+
+    forwardNTT(public_key[0][0], n, streams[0], q[0], mu_array[0], q_bit_lengths[0], psi_table_device[0]);
+    forwardNTT(public_key[0][1], n, streams[1], q[1], mu_array[1], q_bit_lengths[1], psi_table_device[1]);
+    forwardNTT(public_key[0][2], n, streams[2], q[2], mu_array[2], q_bit_lengths[2], psi_table_device[2]);
 }
 
 int main()
@@ -160,6 +195,18 @@ int main()
     vector<unsigned long long> inv_q_last_mod_q = { 20955999355, 17095778744 };
     unsigned long long q_mod_t = 1;
     unsigned long long qi_div_t_rns_array[] = { 67108792, 67108624, 134217600 };
+    vector<unsigned long long> punctured_q = {};
+    vector<unsigned long long> inv_punctured_q = { 26179219651, 42540076863 };
+    unsigned long long gamma = 2305843009213683713;
+    unsigned long long gamma_div_2 = gamma >> 1;
+
+    unsigned long long t = 1024;  // mathematical stuff that is beyond our comprehension
+
+    vector<unsigned long long> output_base = { t, gamma };
+    vector<unsigned> output_base_bit_lengths = { 10, 61 };
+    unsigned long long mu_gamma;
+
+    vector<unsigned long long> neg_inv_q_mod_t_gamma = { 1023, 803320262470649134 };
 
     // run operations on different q's with different streams
     cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
@@ -173,11 +220,6 @@ int main()
     unsigned long long* qi_div_t_rns_array_device;
     cudaMalloc(&qi_div_t_rns_array_device, q_amount * sizeof(unsigned long long));
     cudaMemcpy(qi_div_t_rns_array_device, qi_div_t_rns_array, q_amount * sizeof(unsigned long long), cudaMemcpyHostToDevice);
-
-    unsigned long long m = 100;  // our message to encrypt
-    unsigned long long m_len = log2(m) + 1;  // length of m
-
-    unsigned long long t = 1024;  // mathematical stuff that is beyond our comprehension
 
     unsigned char* in;
     cudaMalloc(&in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n);
@@ -200,32 +242,11 @@ int main()
         }
     }
 
-    generate_random_default(in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n);
-
-    // convert random bytes to ternary distribution
-    // use same byte sequence for each element of the secret key
-    for (int i = 0; i < q_amount; i++)
-    {
-        ternary_dist(in, secret_key[i], n, streams[i], q[i]);
-    }
-
-    // convert random bytes to uniform distribution
-    // use different byte sequences for each q
-    for (int i = 0; i < q_amount; i++)
-    {
-        uniform_dist((unsigned long long*)(in + q_amount * n + i * n * sizeof(unsigned long long)), public_key[1][i], n, streams[i], q[i]);
-    }
-
     // a temp array to store gaussian distribution values (e)
     unsigned long long** temp = (unsigned long long**)malloc(sizeof(unsigned long long*) * q_amount);
     for (int i = 0; i < q_amount; i++)
     {
         cudaMalloc(&temp[i], sizeof(unsigned long long) * n);
-    }
-
-    for (int i = 0; i < q_amount; i++)
-    {
-        gaussian_dist((unsigned*)(in + q_amount * n + q_amount * n * sizeof(unsigned long long)), temp[i], n, streams[i], q[i]);
     }
 
     //generate mu parameters for barrett
@@ -264,27 +285,6 @@ int main()
         cudaMemcpy(psiinv_table_device[i], psiinv_table[i], sizeof(unsigned long long) * n, cudaMemcpyHostToDevice);
     }
 
-    forwardNTT(secret_key[0], n, streams[0], q[0], mu_array[0], q_bit_lengths[0], psi_table_device[0]);
-    forwardNTT(secret_key[1], n, streams[1], q[1], mu_array[1], q_bit_lengths[1], psi_table_device[1]);
-    forwardNTT(secret_key[2], n, streams[2], q[2], mu_array[2], q_bit_lengths[2], psi_table_device[2]);
-
-    for (int i = 0; i < q_amount; i++)
-    {
-        cudaMemcpyAsync(public_key[0][i], public_key[1][i], sizeof(unsigned long long) * n, cudaMemcpyDeviceToDevice, streams[i]);
-    }
-
-    for (int i = 0; i < q_amount; i++)
-    {
-        barrett << <n / 256, 256, 0, streams[i] >> > (public_key[0][i], secret_key[i], q[i], mu_array[i], q_bit_lengths[i]);
-        inverseNTT(public_key[0][i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psiinv_table_device[i]);
-        poly_add_device(public_key[0][i], temp[i], n, streams[i], q[i]);
-        poly_negate_device(public_key[0][i], n, streams[i], q[i]);
-    }
-
-    forwardNTT(public_key[0][0], n, streams[0], q[0], mu_array[0], q_bit_lengths[0], psi_table_device[0]);
-    forwardNTT(public_key[0][1], n, streams[1], q[1], mu_array[1], q_bit_lengths[1], psi_table_device[1]);
-    forwardNTT(public_key[0][2], n, streams[2], q[2], mu_array[2], q_bit_lengths[2], psi_table_device[2]);
-
     unsigned long long* c0;
     unsigned long long* c1;
     cudaMalloc(&c0, sizeof(unsigned long long) * n * q_amount);
@@ -313,30 +313,13 @@ int main()
         m_poly[i] = 0;
     }
 
-    m_poly[2] = 1; m_poly[5] = 5; m_poly[6] = 1; m_poly[1] = 1; m_poly[95] = 1;
     randomArray128(m_poly, 4096, t - 1);
-    m_len = 4096;
 
     unsigned long long* m_poly_device;
     cudaMalloc(&m_poly_device, 4096 * sizeof(unsigned long long));
     cudaMemcpy(m_poly_device, m_poly, 4096 * sizeof(unsigned long long), cudaMemcpyHostToDevice);
 
-    rns_encryption(c0, c1, public_key, in, u, e, n, streams, q, q_bit_lengths, mu_array,
-        inv_q_last_mod_q, psi_table_device, psiinv_table_device, m_poly_device, m_len, qi_div_t_rns_array_device, q_array_device, t);
-
-    vector<unsigned long long> punctured_q = {};
-    vector<unsigned long long> inv_punctured_q = { 26179219651, 42540076863 };
-    unsigned long long gamma = 2305843009213683713;
-    unsigned long long gamma_div_2 = gamma >> 1;
-
-    vector<unsigned long long> output_base = { t, gamma };
-    vector<unsigned> output_base_bit_lengths = { 10, 61 };
-    unsigned long long mu_gamma;
-
-    vector<unsigned long long> neg_inv_q_mod_t_gamma = { 1023, 803320262470649134 };
-
-    q.pop_back();
-    q_amount = q.size();
+    q_amount--;
 
     //generate mu parameter of gamma for barrett
     {
@@ -373,11 +356,6 @@ int main()
         }
     }
 
-    /*for (int i = 0; i < q_amount * 2; i++)
-    {
-        printf("%llu\n", base_change_matrix[i]);
-    }*/
-
     //allocate memory for base change matrix on device and copy the values to it
     unsigned long long* base_change_matrix_device;
     for (int i = 0; i < q_amount; i++)
@@ -385,6 +363,11 @@ int main()
         cudaMalloc(&base_change_matrix_device, sizeof(unsigned long long) * 2 * q_amount);
         cudaMemcpy(base_change_matrix_device, base_change_matrix, sizeof(unsigned long long) * 2 * q_amount, cudaMemcpyHostToDevice);
     }
+
+    keygen_rns(in, q_amount + 1, q, n, secret_key, public_key, streams, temp, mu_array, q_bit_lengths, psi_table_device, psiinv_table_device);
+
+    encryption_rns(c0, c1, public_key, in, u, e, n, streams, q, q_bit_lengths, mu_array,
+        inv_q_last_mod_q, psi_table_device, psiinv_table_device, m_poly_device, qi_div_t_rns_array_device, q_array_device, t, q_amount + 1);
 
     decryption_rns(c0, c1, secret_key, q, q_bit_lengths, mu_array, psi_table_device, psiinv_table_device,
         n, q_amount, inv_punctured_q, base_change_matrix_device, t, gamma, mu_gamma, output_base, output_base_bit_lengths,

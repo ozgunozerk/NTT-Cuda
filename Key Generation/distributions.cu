@@ -229,8 +229,8 @@ void generate_random(unsigned char* a, unsigned n, cudaStream_t& stream)
     memset(k, 78, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
 
-    cudaMemcpyToSymbol(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbolAsync(key, k, XSALSA20_CRYPTO_NONCEBYTES, 0, cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbolAsync(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
     v_nonce = load_littleendian64(h_nonce);
     threadsPerBlock = THREADS_PER_BLOCK;
 
@@ -255,17 +255,15 @@ void generate_random_default(unsigned char* a, unsigned n)
 
     size = NBLKS * XSALSA20_BLOCKSZ;
 
-    //printf("%llu\n", size);
-
     memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
 
-    cudaMemcpyToSymbol(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbolAsync(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice, 0);
+    cudaMemcpyToSymbolAsync(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice, 0);
     v_nonce = load_littleendian64(h_nonce);
     threadsPerBlock = THREADS_PER_BLOCK;
 
-    cudaMemset(d_A, 0, size);
+    cudaMemsetAsync(d_A, 0, size);
 
     N = NBLKS;
 

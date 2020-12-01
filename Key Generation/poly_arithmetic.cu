@@ -161,14 +161,10 @@ __global__ void divide_and_round_q_last_inplace_loop(unsigned long long* input_p
     input_poly[i] = mult.low;  // store the result in the given input_polynomial
 }
 
-__global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
+__global__ void weird_m_stuff(unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
     unsigned long long* q_array_device, unsigned q_amount, unsigned N) // q_mod_t is taken as 1
 {
     register int j = blockIdx.x * 256 + threadIdx.x;
-
-    if (j >= m_len)  // m is the message, it might be less than N,
-        return;  // in this case we want to deal with only m_bits of the polynomials, so we are going to make other threads wait
-
 
     // CAN should we delete this comment below?
     // olur
@@ -241,7 +237,6 @@ __global__ void dec_round_kernel(unsigned long long* input_poly, unsigned long l
     else
         result_poly[i] = (input_poly[i] - input_poly[i + n]) & mask;  // regular stuff: don't add gamma to the polynomial, rest is same
 
-    //printf("%llu\n", result_poly[i]);
 }
 
 __host__ void dec_round(unsigned long long* input_poly, unsigned long long* result_poly, unsigned long long t, unsigned long long gamma, unsigned long long gamma_div_2, unsigned N, cudaStream_t& stream)
@@ -264,7 +259,7 @@ void print_array_ar(unsigned long long a[])
 
 __host__ void fast_convert_array_kernels(unsigned long long* input_poly, unsigned long long* result_poly, unsigned long long t, unsigned long long* base_change_matrix_device, unsigned q_amount, unsigned long long gamma, int gamma_bit_length, unsigned long long mu_gamma, cudaStream_t& stream1, cudaStream_t& stream2, unsigned N)
 {
-    fast_convert_array_kernel_t << <N / 256, 256, 0, stream1 >> > (input_poly, result_poly, t, base_change_matrix_device, q_amount, N);
+    fast_convert_array_kernel_t << <N / 256, 256, 0, 0 >> > (input_poly, result_poly, t, base_change_matrix_device, q_amount, N);
 
     fast_convert_array_kernel_gamma << <N / 256, 256, 0, stream2 >> > (input_poly, result_poly, gamma, base_change_matrix_device, q_amount, gamma_bit_length, mu_gamma, N);
 }

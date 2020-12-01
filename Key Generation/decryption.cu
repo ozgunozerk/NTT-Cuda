@@ -54,7 +54,7 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
     // **************************
     // start of fast convert array
 
-    // c / punc_q mod q  ??? bu ne kanka
+    // c / punc_q mod q
     for (int i = 0; i < q_amount; i++)  // do this for every polynomial in our rns polynomial
     {
         poly_mul_int(c1 + i * n, inv_punctured_q[i], n, streams[i], q[i], mu_array[i], q_bit_lengths[i]);  
@@ -71,8 +71,8 @@ void decryption_rns(unsigned long long* c0, unsigned long long* c1, unsigned lon
     // **************************
 
     // multiply polynomials by neg_inv_q_mod_t_gamma
-    poly_mul_int_t(c0, neg_inv_q_mod_t_gamma[0], n, streams[0], t);  // bunun icinde mod_t cagriliyor, onu aciklamak lazim, ben anlayamadim
-    poly_mul_int(c0 + n, neg_inv_q_mod_t_gamma[1], n, streams[1], gamma, mu_gamma, output_base_bit_lengths[1]);  // bunun icinde de barrett_int cagriliyor, ayni sekilde anlayamadim xD aferin bana
+    poly_mul_int_t(c0, neg_inv_q_mod_t_gamma[0], n, streams[0], t);  // multiply first poly with inv of q mod t
+    poly_mul_int(c0 + n, neg_inv_q_mod_t_gamma[1], n, streams[1], gamma, mu_gamma, output_base_bit_lengths[1]);  // multiply second poly with inv of q mod gamma
 
     //round (but don't underestimate it, it's complex as hell :)
     dec_round(c0, c0 + n * (q_amount - 1), t, gamma, gamma_div_2, n, streams[1]);

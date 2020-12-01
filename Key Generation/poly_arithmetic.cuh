@@ -52,7 +52,7 @@ __global__ void poly_add_integer(unsigned long long a[], unsigned long long b, u
 __global__ void divide_and_round_q_last_inplace_loop(unsigned long long* input_poly, unsigned long long* rns_poly_minus1, unsigned long long base_q_i,
     unsigned long long half_mod, unsigned long long inv_q_last_mod_q_i, unsigned long long base_q_i_mu, int base_q_i_qbit);
 
-__global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
+__global__ void weird_m_stuff(unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
     unsigned long long* q_array_device, unsigned q_amount, unsigned N);
 
 __host__ void poly_add_integer_device_default(unsigned long long* device_a, unsigned long long b, unsigned N, unsigned long long q);
