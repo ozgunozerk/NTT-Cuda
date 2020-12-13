@@ -49,6 +49,12 @@ unsigned modpow64(unsigned a, unsigned b, unsigned mod)
     return res;
 }
 
+unsigned long long modinv128(unsigned long long a, unsigned long long q)
+{
+    unsigned long long ainv = modpow128(a, q - 2, q);
+    return ainv;
+}
+
 unsigned long long bitReverse(unsigned long long a, int bit_length)
 {
     unsigned long long res = 0;
@@ -68,7 +74,7 @@ std::mt19937_64 rng(dev());
 
 void randomArray128(unsigned long long a[], int n, unsigned long long q)
 {
-    std::uniform_int_distribution<unsigned long long> randnum(0, q);
+    std::uniform_int_distribution<unsigned long long> randnum(0, q - 1);
 
     for (int i = 0; i < n; i++)
     {

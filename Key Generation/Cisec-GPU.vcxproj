@@ -12,9 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="demo.cu" />
-    <CudaCompile Include="distributions.cu" />
-    <CudaCompile Include="ntt.cu" />
-    <CudaCompile Include="poly_arithmetic.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="distributions.cuh" />
@@ -80,6 +77,12 @@
       <RuntimeChecks>Default</RuntimeChecks>
       <TypeInfo>false</TypeInfo>
     </CudaCompile>
+    <CudaLink>
+      <GPUDebugInfo>false</GPUDebugInfo>
+    </CudaLink>
+    <CudaLink>
+      <Optimization>O2</Optimization>
+    </CudaLink>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -98,7 +101,20 @@
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
+      <GenerateRelocatableDeviceCode>true</GenerateRelocatableDeviceCode>
+      <CodeGeneration>compute_75,sm_75</CodeGeneration>
+      <PtxAsOptionV>true</PtxAsOptionV>
+      <FastMath>true</FastMath>
+      <Optimization>O2</Optimization>
+      <RuntimeChecks>Default</RuntimeChecks>
+      <TypeInfo>false</TypeInfo>
     </CudaCompile>
+    <CudaLink>
+      <GPUDebugInfo>false</GPUDebugInfo>
+    </CudaLink>
+    <CudaLink>
+      <Optimization>O2</Optimization>
+    </CudaLink>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

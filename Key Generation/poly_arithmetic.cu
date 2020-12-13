@@ -1,6 +1,6 @@
 #include "poly_arithmetic.cuh"
 
-__device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& q, unsigned long long& mu, int& qbit)
+/*__device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& q, unsigned long long& mu, int& qbit)
 {
     uint128_t rx;
 
@@ -16,11 +16,43 @@ __device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& 
 
     if (a >= q)
         a -= q;
-}
+}*/
 
 __global__ void barrett(unsigned long long a[], const unsigned long long b[], unsigned long long q, unsigned long long mu, int qbit)
 {
     register int i = blockIdx.x * 256 + threadIdx.x;
+
+    register unsigned long long ra = a[i];
+    register unsigned long long rb = b[i];
+
+    uint128_t rc, rx;
+
+    mul64(ra, rb, rc);
+
+    rx = rc >> (qbit - 2);
+
+    mul64(rx.low, mu, rx);
+
+    uint128_t::shiftr(rx, qbit + 2);
+
+    mul64(rx.low, q, rx);
+
+    sub128(rc, rx);
+
+    if (rc.low < q)
+        a[i] = rc.low;
+    else
+        a[i] = rc.low - q;
+}
+
+__global__ void barrett_batch(unsigned long long a[], const unsigned long long b[], unsigned n, unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    register int i = blockIdx.x * 256 + threadIdx.x + blockIdx.y * n;
 
     register unsigned long long ra = a[i];
     register unsigned long long rb = b[i];
@@ -179,7 +211,7 @@ __global__ void weird_m_stuff(unsigned long long* m_poly, unsigned long long* c0
     unsigned long long numerator = m_poly[j] + ((t + 1) >> 1);  // add t to 1, then divide it by 2, add that value to each element of the polynomial (only for m bits)
     unsigned long long fix = numerator / t;  // divide that value with t, (we assume t is a perfect power of 2, so we can apply shift instead of division with log2t)
 
-#pragma unroll
+    #pragma unroll
     for (int i = 0; i < q_amount - 1; i++)  // for every polynomial, except the last one
     {
         c0[j + i * N] = (c0[j + i * N] + ((m_poly[j] * qi_div_t_rns_array_device[i]) + fix)) % q_array_device[i];
@@ -222,7 +254,7 @@ __global__ void fast_convert_array_kernel_gamma(unsigned long long* input_poly, 
     {
         mul64(input_poly[k + i * n], base_change_matrix_device[i + q_amount], tmp);
         singleBarrett(tmp, gamma, mu_gamma, gamma_bit_length);
-        result_poly[k + n] += tmp.low;
+        result_poly[k + n] = (result_poly[k + n] + tmp.low) % gamma;
     }
     result_poly[k + n] = result_poly[k + n] % gamma;
 }

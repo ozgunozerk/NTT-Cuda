@@ -288,7 +288,7 @@ __host__ void forwardNTT(unsigned long long* device_a, unsigned N, cudaStream_t&
     }
     else if (N == 8192)
     {
-        CTBasedNTTInner<1, 8192> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
 
         CTBasedNTTInnerSingle<2, 8192> << <2, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
     }
@@ -337,5 +337,316 @@ __host__ void inverseNTT(unsigned long long* device_a, unsigned N, cudaStream_t&
     else
     {
         GSBasedINTTInnerSingle<1, 2048> << <1, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+    }
+}
+
+template<unsigned l, unsigned N>
+__global__ void CTBasedNTTInnerSingle_batch(unsigned long long a[], unsigned long long psi_powers[], unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    register int local_tid = threadIdx.x;
+
+    extern __shared__ unsigned long long shared_array[];
+
+#pragma unroll
+    for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
+    {
+        register int global_tid = local_tid + iteration_num * 1024;
+        shared_array[global_tid] = a[global_tid + blockIdx.x * (N / l) + blockIdx.y * N];
+    }
+
+#pragma unroll
+    for (int length = l; length < N; length *= 2)
+    {
+        register int step = (N / length) / 2;
+
+#pragma unroll
+        for (int iteration_num = 0; iteration_num < (N / 1024 / l) / 2; iteration_num++)
+        {
+
+            register int global_tid = local_tid + iteration_num * 1024;
+            register int psi_step = global_tid / step;
+            register int target_index = psi_step * step * 2 + global_tid % step;
+
+            psi_step = (global_tid + blockIdx.x * (N / l / 2)) / step;
+
+            register unsigned long long psi = psi_powers[length + psi_step + index * N];
+
+            register unsigned long long first_target_value = shared_array[target_index];
+            register uint128_t temp_storage = shared_array[target_index + step];  // this is for eliminating the possibility of overflow
+
+            mul64(temp_storage.low, psi, temp_storage);
+
+            singleBarrett(temp_storage, q, mu, qbit);
+            register unsigned long long second_target_value = temp_storage.low;
+
+            register unsigned long long target_result = first_target_value + second_target_value;
+
+            target_result -= q * (target_result >= q);
+
+            shared_array[target_index] = target_result;
+
+            first_target_value += q * (first_target_value < second_target_value);
+
+            shared_array[target_index + step] = first_target_value - second_target_value;
+        }
+
+        __syncthreads();
+    }
+
+#pragma unroll
+    for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
+    {
+        register int global_tid = local_tid + iteration_num * 1024;
+        a[global_tid + blockIdx.x * (N / l) + blockIdx.y * N] = shared_array[global_tid];
+    }
+
+}
+
+template<unsigned l, unsigned N>
+__global__ void GSBasedINTTInnerSingle_batch(unsigned long long a[], unsigned long long psiinv_powers[], unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    register int local_tid = threadIdx.x;
+
+    __shared__ unsigned long long shared_array[2048];
+
+    register unsigned long long q2 = (q + 1) >> 1;
+
+#pragma unroll
+    for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
+    {
+        register int global_tid = local_tid + iteration_num * 1024;
+        shared_array[global_tid] = a[global_tid + blockIdx.x * (N / l) + blockIdx.y * N];
+    }
+
+    __syncthreads();
+
+#pragma unroll
+    for (int length = (N / 2); length >= l; length /= 2)
+    {
+        register int step = (N / length) / 2;
+
+#pragma unroll
+        for (int iteration_num = 0; iteration_num < (N / 1024 / l) / 2; iteration_num++)
+        {
+            register int global_tid = local_tid + iteration_num * 1024;
+            register int psi_step = global_tid / step;
+            register int target_index = psi_step * step * 2 + global_tid % step;
+
+            psi_step = (global_tid + blockIdx.x * (N / l / 2)) / step;
+
+            register unsigned long long psiinv = psiinv_powers[length + psi_step + index * N];
+
+            register unsigned long long first_target_value = shared_array[target_index];
+            register unsigned long long second_target_value = shared_array[target_index + step];
+
+            register unsigned long long target_result = first_target_value + second_target_value;
+
+            target_result -= q * (target_result >= q);
+
+            shared_array[target_index] = (target_result >> 1) + q2 * (target_result & 1);
+
+            first_target_value += q * (first_target_value < second_target_value);
+
+            register uint128_t temp_storage = first_target_value - second_target_value;
+
+            mul64(temp_storage.low, psiinv, temp_storage);
+
+            singleBarrett(temp_storage, q, mu, qbit);
+
+            register unsigned long long temp_storage_low = temp_storage.low;
+
+            shared_array[target_index + step] = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
+        }
+
+        __syncthreads();
+    }
+
+#pragma unroll
+    for (int iteration_num = 0; iteration_num < (N / 1024 / l); iteration_num++)
+    {
+        register int global_tid = local_tid + iteration_num * 1024;
+        a[global_tid + blockIdx.x * (N / l) + blockIdx.y * N] = shared_array[global_tid];
+    }
+}
+
+template<unsigned l, unsigned N>
+__global__ void CTBasedNTTInner_batch(unsigned long long a[], unsigned long long psi_powers[], unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    int length = l;
+
+    register int global_tid = blockIdx.x * 1024 + threadIdx.x;
+    register int step = (N / length) / 2;
+    register int psi_step = global_tid / step;
+    register int target_index = psi_step * step * 2 + global_tid % step + blockIdx.y * N;
+
+    register unsigned long long psi = psi_powers[length + psi_step + index * N];
+
+    register unsigned long long first_target_value = a[target_index];
+    register uint128_t temp_storage = a[target_index + step];
+
+    mul64(temp_storage.low, psi, temp_storage);
+
+    singleBarrett(temp_storage, q, mu, qbit);
+    register unsigned long long second_target_value = temp_storage.low;
+
+    register unsigned long long target_result = first_target_value + second_target_value;
+
+    target_result -= q * (target_result >= q);
+
+    a[target_index] = target_result;
+
+    first_target_value += q * (first_target_value < second_target_value);
+
+    a[target_index + step] = first_target_value - second_target_value;
+}
+
+template<unsigned l, unsigned N>
+__global__ void GSBasedINTTInner_batch(unsigned long long a[], unsigned long long psiinv_powers[], unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    int length = l;
+
+    register int global_tid = blockIdx.x * 1024 + threadIdx.x;
+    register int step = (N / length) / 2;
+    register int psi_step = global_tid / step;
+    register int target_index = psi_step * step * 2 + global_tid % step + blockIdx.y * N;
+
+    register unsigned long long psiinv = psiinv_powers[length + psi_step + index * N];
+
+    register unsigned long long first_target_value = a[target_index];
+    register unsigned long long second_target_value = a[target_index + step];
+
+    register unsigned long long target_result = first_target_value + second_target_value;
+
+    target_result -= q * (target_result >= q);
+
+    register unsigned long long q2 = (q + 1) >> 1;
+
+    target_result = (target_result >> 1) + q2 * (target_result & 1);
+
+    a[target_index] = target_result;
+
+    first_target_value += q * (first_target_value < second_target_value);
+
+    register uint128_t temp_storage = first_target_value - second_target_value;
+
+    mul64(temp_storage.low, psiinv, temp_storage);
+
+    singleBarrett(temp_storage, q, mu, qbit);
+
+    register unsigned long long temp_storage_low = temp_storage.low;
+
+    temp_storage_low = (temp_storage_low >> 1) + q2 * (temp_storage_low & 1);
+
+    a[target_index + step] = temp_storage_low;
+}
+
+__host__ void forwardNTT_batch(unsigned long long* device_a, unsigned N, unsigned long long* psi_powers, unsigned num, unsigned division)
+{
+    if (N == 32768)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(8, num);
+        CTBasedNTTInner_batch<1, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInner_batch<2, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInner_batch<4, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInnerSingle_batch<8, 32768> << <single_dim, 1024, 4096 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
+    }
+    else if (N == 16384)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(4, num);
+        CTBasedNTTInner_batch<1, 16384> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInner_batch<2, 16384> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInnerSingle_batch<4, 16384> << <single_dim, 1024, 4096 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
+    }
+    else if (N == 8192)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(2, num);
+        CTBasedNTTInner_batch<1, 8192> << <multi_dim, 1024, 0, 0 >> > (device_a, psi_powers, division);
+
+        CTBasedNTTInnerSingle_batch<2, 8192> << <single_dim, 1024, 4096 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
+    }
+    else if (N == 4096)
+    {
+        dim3 single_dim(1, num);
+        CTBasedNTTInnerSingle_batch<1, 4096> << <single_dim, 1024, 4096 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
+    }
+    else
+    {
+        dim3 single_dim(1, num);
+        CTBasedNTTInnerSingle_batch<1, 2048> << <single_dim, 1024, 2048 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
+    }
+}
+
+__host__ void inverseNTT_batch(unsigned long long* device_a, unsigned N, unsigned long long* psiinv_powers, unsigned num, unsigned division)
+{
+    if (N == 32768)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(16, num);
+        GSBasedINTTInnerSingle_batch<16, 32768> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+
+        GSBasedINTTInner_batch<8, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<4, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<2, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<1, 32768> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+    }
+    else if (N == 16384)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(8, num);
+        GSBasedINTTInnerSingle_batch<8, 16384> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+
+        GSBasedINTTInner_batch<4, 16384> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<2, 16384> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<1, 16384> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+    }
+    else if (N == 8192)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(4, num);
+        GSBasedINTTInnerSingle_batch<4, 8192> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+
+        GSBasedINTTInner_batch<2, 8192> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+        GSBasedINTTInner_batch<1, 8192> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+    }
+    else if (N == 4096)
+    {
+        dim3 multi_dim(N / 1024 / 2, num);
+        dim3 single_dim(2, num);
+        GSBasedINTTInnerSingle_batch<2, 4096> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+
+        GSBasedINTTInner_batch<1, 4096> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
+    }
+    else
+    {
+        dim3 single_dim(1, num);
+        GSBasedINTTInnerSingle_batch<1, 2048> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
     }
 }
