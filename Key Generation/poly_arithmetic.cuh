@@ -61,24 +61,6 @@ __host__ void poly_add_integer_device_default(unsigned long long* device_a, unsi
 
 #endif
 
-/*__device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& q, unsigned long long& mu, int& qbit)
-{
-    uint128_t rx;
-
-    rx = a >> (qbit - 2);
-
-    mul64(rx.low, mu, rx);
-
-    uint128_t::shiftr(rx, qbit + 2);
-
-    mul64(rx.low, q, rx);
-
-    sub128(a, rx);
-
-    if (a >= q)
-        a -= q;
-}*/
-
 __global__ void barrett(unsigned long long a[], const unsigned long long b[], unsigned long long q, unsigned long long mu, int qbit)
 {
     register int i = blockIdx.x * 256 + threadIdx.x;
@@ -299,6 +281,7 @@ __global__ void fast_convert_array_kernel_t(unsigned long long* input_poly, unsi
         tmp = tmp & mask; //taking mod t (works since t is a power of 2)
 
         result_poly[k] += tmp;
+        //printf("i = %d, value = %llu\n", i, base_change_matrix_device[i]);
     }
     result_poly[k] = result_poly[k] & mask;
 }
