@@ -14,6 +14,8 @@
     <CudaCompile Include="demo.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bfv_encryption.cuh" />
+    <ClInclude Include="bfv_key_generation.cuh" />
     <ClInclude Include="distributions.cuh" />
     <ClInclude Include="helper.h" />
     <ClInclude Include="ntt.cuh" />

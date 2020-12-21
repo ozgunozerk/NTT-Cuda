@@ -9,252 +9,7 @@ using std::vector;
 
 #include "poly_arithmetic.cuh"
 #include "distributions.cuh"
-
-#define small_block 128
-
-void print_array(unsigned long long a[], unsigned n)
-{
-    cout << "[";
-    for (int i = 0; i < n; i++)
-    {
-        cout << a[i] << ", ";
-    }
-    cout << "]\n";
-}
-
-__global__ void divide_and_round_q_last_inplace_add_x2(unsigned long long* c, unsigned n, int q_amount)
-{
-    unsigned long long last_modulus = q_cons[q_amount - 1];  // get the last q from the array
-    unsigned long long half_last_modulus = last_modulus >> 1;  // divide it by 2
-
-    int i = blockIdx.x * small_block + threadIdx.x;
-
-    unsigned long long ra = c[n * (q_amount - 1) + i % n + (n * q_amount) * (i >= n)];
-    ra += half_last_modulus;
-
-    if (ra >= last_modulus)
-        ra -= last_modulus;
-
-    c[n * (q_amount - 1) + i % n + (n * q_amount) * (i >= n)] = ra;
-
-}
-
-__global__ void divide_and_round_q_last_inplace_loop_xq(unsigned long long* c, unsigned q_amount, unsigned n)
-{
-    int i = blockIdx.x * small_block + threadIdx.x;
-    int i_i = i % n;
-
-    unsigned long long last_modulus = q_cons[q_amount - 1];  // get the last q from the array
-    unsigned long long half_last_modulus = last_modulus >> 1;  // divide it by 2
-
-    unsigned index = (i % (n * (q_amount - 1))) / n;
-
-    unsigned long long q = q_cons[index];
-    unsigned long long mu = mu_cons[index];
-    int q_bit = q_bit_cons[index];
-    unsigned long long half_mod = half_last_modulus % q;
-
-    unsigned long long inv_q_last_mod_q = inv_q_last_mod_q_cons[index];
-
-    unsigned second_half = i >= (n * (q_amount - 1));
-    unsigned division = (i - n * second_half * (q_amount - 1)) / n;
-    unsigned long long* rns_poly_minus1 = c + second_half * (n * q_amount) + n * (q_amount - 1);
-    unsigned long long* input_poly = c + second_half * (n * q_amount) + n * division;
-
-    unsigned long long temp_poly_i = rns_poly_minus1[i_i] % q;
-    // get the last polynomials respective index with = rns_poly_minus1[i] 
-    // get the the base q of the polynomial (one of other polynomials other than the last one) = base_q_i 
-    // store the result in a variable = temp_poly_i
-
-    if (temp_poly_i < half_mod)  // mod operation for safe substraction on line 139
-        temp_poly_i += q;
-
-    temp_poly_i -= half_mod; // substract half_modulus from the index of last polynomial
-
-    if (input_poly[i_i] < temp_poly_i)  // now we gonna substract that computed value from other polynomials
-        input_poly[i_i] += q;  // so we have to ensure substraction safety (underflow)
-
-    input_poly[i_i] -= temp_poly_i;
-    // substract the last_polynomials respective calculated value = temp_poly_i
-    // from the respective index of the other polynomial = input_poly[i]
-
-    uint128_t mult;
-    mul64(input_poly[i_i], inv_q_last_mod_q, mult);
-    // multiply the input_poly[i] with:
-    // inverse of last polynomials q
-    // to the mod of respective polynomials q
-    // which is: inv_q_last_mod_q_i 
-    // :)
-
-    singleBarrett(mult, q, mu, q_bit);
-    // we might have fucked up, so apply mod again
-
-    input_poly[i_i] = mult.low;  // store the result in the given input_polynomial
-}
-
-__global__ void convert_ternary_gaussian_x2(unsigned char* in, unsigned long long* out_t1, unsigned long long* out_e1, unsigned n, int q_amount)
-{
-    int i = blockIdx.x * convertBlockSize + threadIdx.x;
-
-    //ternary
-
-    float d = (float)in[i % n];
-
-    d /= (256.0f / 3);
-
-    if (d >= 2)
-        out_t1[i] = 1;
-    else if (d >= 1)
-        out_t1[i] = 0;
-    else
-        out_t1[i] = q_cons[i / n] - 1;
-
-    if (d >= 2)
-        out_t1[i + n * q_amount] = 1;
-    else if (d >= 1)
-        out_t1[i + n * q_amount] = 0;
-    else
-        out_t1[i + n * q_amount] = q_cons[i / n] - 1;
-
-    // gaussian
-
-    unsigned* in_u = (unsigned*)(in + n);
-    d = in_u[i % n];
-
-    d /= 4294967295;
-
-    if (d == 0)
-        d += 1.192092896e-07F;
-    else if (d == 1)
-        d -= 1.192092896e-07F;
-
-    d = normcdfinvf(d);
-
-    d = d * (float)dstdev + dmean;
-
-    if (d > 19.2)
-    {
-        d = 19.2;
-    }
-    else if (d < -19.2)
-    {
-        d = -19.2;
-    }
-
-    int dd = (int)d;
-
-    if (dd < 0)
-        out_e1[i] = q_cons[i / n] + dd;
-    else
-        out_e1[i] = dd;
-
-    in_u = (unsigned*)(in + n * 5);
-    d = in_u[i % n];
-
-    d /= 4294967295;
-
-    if (d == 0)
-        d += 1.192092896e-07F;
-    else if (d == 1)
-        d -= 1.192092896e-07F;
-
-    d = normcdfinvf(d);
-
-    d = d * (float)dstdev + dmean;
-
-    if (d > 19.2)
-    {
-        d = 19.2;
-    }
-    else if (d < -19.2)
-    {
-        d = -19.2;
-    }
-
-    dd = (int)d;
-
-    if (dd < 0)
-        out_e1[i + n * q_amount] = q_cons[i / n] + dd;
-    else
-        out_e1[i + n * q_amount] = dd;
-
-}
-
-__global__ void poly_add_xq(unsigned long long* c, unsigned long long* e, unsigned n, int q_amount)
-{
-    int i = blockIdx.x * small_block + threadIdx.x;
-
-    unsigned long long ra = c[i] + e[i];
-
-    if (ra > q_cons[i / n])
-        ra -= q_cons[i / n];
-
-    c[i] = ra;
-
-    ra = c[n * q_amount + i] + e[n * q_amount + i]; //optimise later
-
-    if (ra > q_cons[i / n])
-        ra -= q_cons[i / n];
-
-    c[n * q_amount + i] = ra;
-}
-
-void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsigned char* in, unsigned long long** u, unsigned long long* e, unsigned N,
-    cudaStream_t streams[], unsigned long long* q, vector<unsigned> q_bit_lengths,
-    vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, unsigned long long* psi_table_device, unsigned long long* psiinv_table_device,
-    unsigned long long* m_poly_device, unsigned long long* qi_div_t_rns_array_device, unsigned long long* q_array_device, unsigned t, int q_amount)
-{
-    generate_random_default(in, sizeof(char) * N + sizeof(unsigned) * N * 2);  // default is for default stream: this is for synchronization issues
-    // otherwise ternary distributions may run before this function, which is UNACCEPTABLE
-
-    /*for (int i = 0; i < q_amount; i++)
-    {
-        ternary_dist(in, c + i * N, N, streams[i], q[i]);  // generate ternary dist poly directly into c0 and c1. c0 = c1, 
-        ternary_dist(in, c + i * N + q_amount * N, N, streams[i], q[i]);  // its represented by 'u' 
-        // for ease of operations and memory allocation, we have generated 2 of them (identical), since we override some stuff in polynomial multiplication.
-    }
-
-    for (int i = 0; i < q_amount; i++)
-    {
-        gaussian_dist((unsigned*)(in + N), e + i * N, N, streams[i], q[i]);  // this is again for generation ternary distribution, although it's name is gaussian
-        // e0
-
-        gaussian_dist((unsigned*)(in + N + N * 4), e + i * N + N * q_amount, N, streams[i], q[i]);  // i was joking this is for gaussian
-        // e1
-    }*/
-
-    int convert_block_amount = q_amount * N / convertBlockSize;
-    convert_ternary_gaussian_x2 << <convert_block_amount, convertBlockSize, 0, 0 >> > (in, c, e, N, q_amount);
-
-    /*for (int i = 0; i < q_amount; i++)
-    {
-        // multiply each public key with 'u'(c0 and c1). Remember that c0 and c1 are identical
-        half_poly_mul_device(c + i * N, public_key + i * N, N, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device + i * N, psiinv_table_device + i * N);
-        half_poly_mul_device(c + i * N + q_amount * N, public_key + i * N + q_amount * N, N, streams[i + q_amount], q[i], mu_array[i], q_bit_lengths[i], psi_table_device + i * N, psiinv_table_device + i * N);
-    }*/
-
-    forwardNTT_batch(c, N, psi_table_device, q_amount * 2, q_amount);
-    dim3 barrett_dim(N / 256, q_amount * 2);
-    barrett_batch<<< barrett_dim, 256, 0, 0>>>(c, public_key, N, q_amount);
-    inverseNTT_batch(c, N, psiinv_table_device, q_amount * 2, q_amount);
-
-    /*for (int i = 0; i < q_amount; i++)
-    {
-        poly_add_device(c + i * N, e + i * N, N, streams[i], q[i]);  // add e0 to publickey[0]
-        poly_add_device(c + i * N + q_amount * N, e + i * N + N * q_amount, N, streams[i + q_amount], q[i]);  // add e1 to publickey[1]
-    }*/
-
-    poly_add_xq << <N * q_amount / small_block, small_block, 0, 0 >> > (c, e, N, q_amount);
-
-    divide_and_round_q_last_inplace_add_x2 << <N * 2 / small_block, small_block, 0, 0 >> > (c, N, q_amount);
-
-    /*divide_and_round_q_last_inplace(c, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
-    divide_and_round_q_last_inplace(c + q_amount * N, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);*/
-
-    divide_and_round_q_last_inplace_loop_xq << <N * 2 * (q_amount - 1) / small_block, small_block, 0, 0 >> > (c, q_amount, N);
-
-    weird_m_stuff << <N / 256, 256, 0, 0 >> > (m_poly_device, c, t, qi_div_t_rns_array_device, q_array_device, q_amount, N);  // look at the comments in the function
-}
+#include "bfv_encryption.cuh"
 
 void decryption_rns(unsigned long long* c, unsigned long long** secret_key,
     unsigned long long* q, vector<unsigned>& q_bit_lengths, vector<unsigned long long>& mu_array,
@@ -308,7 +63,7 @@ void decryption_rns(unsigned long long* c, unsigned long long** secret_key,
 }
 
 void keygen_rns(unsigned char in[], int q_amount, unsigned long long* q, unsigned n, unsigned long long** secret_key, unsigned long long* public_key,
-    cudaStream_t* streams, unsigned long long** temp, vector<unsigned long long> mu_array, vector<unsigned> q_bit_lengths, 
+    cudaStream_t* streams, unsigned long long** temp, vector<unsigned long long> mu_array, vector<unsigned> q_bit_lengths,
     unsigned long long* psi_table_device, unsigned long long* psiinv_table_device)
 {
     generate_random_default(in, (sizeof(char) + sizeof(unsigned long long)) * q_amount * n + sizeof(unsigned) * n);
@@ -358,26 +113,33 @@ void keygen_rns(unsigned char in[], int q_amount, unsigned long long* q, unsigne
 
 int main()
 {
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     //cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
     int n = 1024 * 8;
 
     unsigned long long t = 1024;  // mathematical stuff that is beyond our comprehension
     
-    /*unsigned long long q_array[] = { 36028797017456641, 36028797014704129, 36028797014573057, 36028797014376449, 36028797013327873, 36028797013000193, 36028797012606977, 36028797010444289, 36028797009985537, 36028797005856769, 36028797005529089, 36028797005135873, 36028797003694081, 36028797003563009, 36028797001138177 };
-    vector<unsigned long long> psi_roots = { 1155186985540, 631260524634, 1526647220035, 455957817523, 1650884166641, 10316746886, 768741990072, 3911086673862, 5947090524825, 47595902954, 2691682578057, 3903338373, 235185854118, 1769787302793, 3151164484090 };*/
+    /*unsigned long long q_array[] = { 36028797012606977, 36028797010444289, 36028797009985537, 36028797005856769, 36028797005529089, 36028797005135873, 36028797003694081, 36028797003563009, 36028797001138177 };
+    vector<unsigned long long> psi_roots = { 768741990072, 3911086673862, 5947090524825, 47595902954, 2691682578057, 3903338373, 235185854118, 1769787302793, 3151164484090 };*/
 
-    unsigned long long q_array[] = { 274877562881, 274877202433, 274877153281 };
-    vector<unsigned long long> psi_roots = { 71485851, 33872056, 22399294 };
+    /*unsigned long long q_array[] = { 274877562881, 274877202433, 274877153281 };
+    vector<unsigned long long> psi_roots = { 71485851, 33872056, 22399294 };*/
 
     /*unsigned long long q_array[] = { 68719403009, 68719230977, 137438822401 };
     vector<unsigned long long> psi_roots = { 24250113, 29008497, 8625844 };*/
 
-    /*unsigned long long q_array[] = { 8796092858369, 8796092792833, 17592186028033, 17592185438209 };
-    vector<unsigned long long> psi_roots = { 1734247217, 304486499, 331339694, 9366611238 };*/
+    unsigned long long q_array[] = { 8796092858369, 8796092792833, 17592186028033, 17592185438209 };
+    vector<unsigned long long> psi_roots = { 1734247217, 304486499, 331339694, 9366611238 };
 
     /*unsigned long long q_array[] = { 1125899904679937, 1125899903991809, 1125899903827969, 1125899903795201, 1125899903500289 };
     vector<unsigned long long> psi_roots = { 184459094098, 125929543876, 13806300337, 10351677219, 68423600398 };*/
+
+    /*unsigned long long q_array[] = { 281474976546817, 281474976317441, 281474975662081, 562949952798721, 562949952700417, 562949952274433, 562949951979521, 562949951881217, 1125899904679937 };
+    vector<unsigned long long> psi_roots = { 23720796222, 21741529212, 13412349256, 1196930505, 31695302805, 6575376104, 394024808, 45092463253, 184459094098 };*/
 
     vector<unsigned long long> psiinv_roots;
     vector<unsigned long long> mu_array = {};
@@ -527,13 +289,9 @@ int main()
     cudaMalloc(&e, sizeof(unsigned long long) * n * q_amount * 2);
 
     unsigned long long* m_poly = (unsigned long long*)malloc(sizeof(unsigned long long) * n);
-    for (int i = 0; i < n; i++)
-    {
-        m_poly[i] = 0;
-    }
 
     randomArray128(m_poly, n, t);
-    //m_poly[0] = 1; m_poly[1] = 1; m_poly[2] = 1; m_poly[3] = 1;
+
     unsigned long long* m_poly_device;
     cudaMalloc(&m_poly_device, n * sizeof(unsigned long long));
     cudaMemcpy(m_poly_device, m_poly, n * sizeof(unsigned long long), cudaMemcpyHostToDevice);
@@ -593,8 +351,10 @@ int main()
 
     keygen_rns(in, q_amount + 1, q_array, n, secret_key, public_key, streams, temp, mu_array, q_bit_lengths, psi_table_device, psiinv_table_device);
 
+    cudaEventRecord(start);
     encryption_rns(c, public_key, in, u, e, n, streams, q_array, q_bit_lengths, mu_array,
         inv_q_last_mod_q, psi_table_device, psiinv_table_device, m_poly_device, qi_div_t_rns_array_device, q_array_device, t, q_amount + 1);
+    cudaEventRecord(stop);
 
     decryption_rns(c, secret_key, q_array, q_bit_lengths, mu_array, psi_table_device, psiinv_table_device,
         n, q_amount, inv_punctured_q, base_change_matrix_device, t, gamma, mu_gamma, output_base, output_base_bit_lengths,
@@ -611,6 +371,11 @@ int main()
         if (m_poly[i] != plain_poly[i])
             cout << "Error " << i << endl;
     }
+
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+
+    cout << milliseconds << " millisec." << endl;
 
     /*cout << "[";
     for (int i = 0; i < 5; i++)
