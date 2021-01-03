@@ -199,7 +199,6 @@ __global__ void convert_range(unsigned long long* in, unsigned long long* out, u
     d *= (double)(q - 1);
 
     out[i] = (unsigned long long)d;
-    //out[i] = 0;
 }
 
 __global__ void convert_ternary(unsigned char* in, unsigned long long* out, unsigned long long q)
@@ -262,12 +261,12 @@ void generate_random_default(unsigned char* a, unsigned n)
     memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
 
-    cudaMemcpyToSymbol(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice); //re add async
-    cudaMemcpyToSymbol(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbolAsync(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice); //re add async
+    cudaMemcpyToSymbolAsync(sigma, hsigma, 16, 0, cudaMemcpyHostToDevice);
     v_nonce = load_littleendian64(h_nonce);
     threadsPerBlock = THREADS_PER_BLOCK;
 
-    cudaMemset(d_A, 0, size); //re add async
+    cudaMemsetAsync(d_A, 0, size); //re add async
 
     N = NBLKS;
 

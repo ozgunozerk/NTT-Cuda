@@ -9,19 +9,7 @@ using std::vector;
 #include "distributions.cuh"
 #include "poly_arithmetic.cuh"
 
-#include <iostream>
-
 #define small_block 128
-
-void print_array(unsigned long long a[])
-{
-    std::cout << "{";
-    for (int i = 0; i < 4096; i++)
-    {
-        std::cout << a[i] << ", ";
-    }
-    std::cout << "}\n";
-}
 
 __global__ void convert_ternary_gaussian_x2(unsigned char* in, unsigned long long* out_t1, unsigned long long* out_e1, unsigned n, int q_amount)
 {
@@ -193,32 +181,10 @@ __global__ void poly_add_xq(unsigned long long* c, unsigned long long* e, unsign
     c[i + (n * q_amount) * blockIdx.y] = ra;
 }
 
-void divide_and_round_q_last_inplace(unsigned long long* poly, unsigned N, cudaStream_t streams[], unsigned long long* q, vector<unsigned> q_bit_lengths,
-    vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, unsigned q_amount)
-{
-    unsigned long long last_modulus = q[q_amount - 1];  // get the last q from the array
-    unsigned long long half_last_modulus = last_modulus >> 1;  // divide it by 2
-
-    poly_add_integer_device_default(poly + N * (q_amount - 1), half_last_modulus, N, last_modulus);
-    // poly + N * (q_amount - 1) = getting the to the last q in the flattened array
-    // adding half_last_modulus to it, in mod last_modulus
-    // N is required for calling the kernel with optimal thread amount
-
-    for (int i = 0; i < q_amount - 1; i++)
-    {
-        unsigned long long half_mod = half_last_modulus % q[i];  // getting the half_last_modulus' mod in respect to every other q[x]
-        divide_and_round_q_last_inplace_loop << <N / 256, 256, 0, streams[i] >> > (poly + N * i, poly + N * (q_amount - 1), q[i], half_mod, inv_q_last_mod_q[i], mu_array[i], q_bit_lengths[i]);  // too long to explain, inspect the comments in the function
-        std::cout << "invq last modq: " << inv_q_last_mod_q[i] << std::endl;
-    }
-}
-
-__global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
+__global__ void weird_m_stuff(unsigned long long* m_poly, unsigned long long* c0, unsigned long long t, unsigned long long* qi_div_t_rns_array_device,
     unsigned long long* q_array_device, unsigned q_amount, unsigned n) // q_mod_t is taken as 1
 {
     register int j = blockIdx.x * 256 + threadIdx.x;
-
-    if (j >= m_len)  // m is the message, it might be less than N,
-        return;  // in this case we want to deal with only m_bits of the polynomials, so we are going to make other threads wait
 
     // second reminder: q mod t is assumed 1, multiplying the polynomial with that value becomes unnecessary. 
     // if that's not the case though, include that operation in right here
@@ -234,10 +200,6 @@ __global__ void weird_m_stuff(unsigned long long m_len, unsigned long long* m_po
         // to be more specific, it's storing the result of base_q value, divided by t
         // but its represented as rns, so its value is computed by, [base_q / t] mod of each qi 
         // qi's are the q's in the base_q
-        if (j == 0)
-        {
-            printf("qi div t rns device : %llu\n", qi_div_t_rns_array_device[i]);
-        }
     }
 }
 
@@ -249,7 +211,7 @@ void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsig
     generate_random_default(in, sizeof(char) * n + sizeof(unsigned) * n * 2);  // default is for default stream: this is for synchronization issues
     // otherwise ternary distributions may run before this function, which is UNACCEPTABLE
 
-    for (int i = 0; i < q_amount; i++)
+    /*for (int i = 0; i < q_amount; i++)
     {
         ternary_dist(in, c + i * n, n, streams[i], q[i]);  // generate ternary dist poly directly into c0 and c1. c0 = c1,
         ternary_dist(in, c + i * n + q_amount * n, n, streams[i], q[i]);  // its represented by 'u'
@@ -263,16 +225,16 @@ void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsig
 
         gaussian_dist((unsigned*)(in + n + n * 5), e + i * n + n * q_amount, n, streams[i], q[i]);  // i was joking this is for gaussian
         // e1
-    }
+    }*/
 
-    //convert_ternary_gaussian_x2<<< q_amount * n / convertBlockSize, convertBlockSize, 0, 0 >>>(in, c, e, n, q_amount);
+    convert_ternary_gaussian_x2<<< q_amount * n / convertBlockSize, convertBlockSize, 0, 0 >>>(in, c, e, n, q_amount);
 
-    for (int i = 0; i < q_amount; i++)
+    /*for (int i = 0; i < q_amount; i++)
     {
         // multiply each public key with 'u'(c0 and c1). Remember that c0 and c1 are identical
         half_poly_mul_device(c + i * n, public_key + i * n, n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device + i * n, psiinv_table_device + i * n);
         half_poly_mul_device(c + i * n + q_amount * n, public_key + i * n + q_amount * n, n, streams[i], q[i], mu_array[i], q_bit_lengths[i], psi_table_device + i * n, psiinv_table_device + i * n);
-    }
+    }*/
 
     /*unsigned long long arr[4096];
     for (int i = 0; i < q_amount; i++)
@@ -286,26 +248,26 @@ void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsig
         print_array(arr);
     }*/
 
-    //forwardNTT_batch(c, n, psi_table_device, q_amount * 2, q_amount);
-    //dim3 barrett_dim(n / 256, q_amount * 2);
-    //barrett_batch<<< barrett_dim, 256, 0, 0 >>>(c, public_key, n, q_amount);
-    //inverseNTT_batch(c, n, psiinv_table_device, q_amount * 2, q_amount);
+    forwardNTT_batch(c, n, psi_table_device, q_amount * 2, q_amount);
+    dim3 barrett_dim(n / 256, q_amount * 2);
+    barrett_batch<<< barrett_dim, 256, 0, 0 >>>(c, public_key, n, q_amount);
+    inverseNTT_batch(c, n, psiinv_table_device, q_amount * 2, q_amount);
 
-    for (int i = 0; i < q_amount; i++)
+    /*for (int i = 0; i < q_amount; i++)
     {
         poly_add_device(c + i * n, e + i * n, n, streams[i], q[i]);  // add e0 to publickey[0]
         poly_add_device(c + i * n + q_amount * n, e + i * n + n * q_amount, n, streams[i], q[i]);  // add e1 to publickey[1]
-    }
+    }*/
 
-    //dim3 add_xq_dim(n * q_amount / small_block, 2);
-    //poly_add_xq<<< add_xq_dim, small_block, 0, 0 >> > (c, e, n, q_amount);
+    dim3 add_xq_dim(n * q_amount / small_block, 2);
+    poly_add_xq<<< add_xq_dim, small_block, 0, 0 >> > (c, e, n, q_amount);
 
-    //divide_and_round_q_last_inplace_add_x2<<< n * 2 / small_block, small_block, 0, 0 >>>(c, n, q_amount);
+    divide_and_round_q_last_inplace_add_x2<<< n * 2 / small_block, small_block, 0, 0 >>>(c, n, q_amount);
 
-    divide_and_round_q_last_inplace(c, n, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
-    divide_and_round_q_last_inplace(c + q_amount * n, n, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);
+    //divide_and_round_q_last_inplace(c, n, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
+    //divide_and_round_q_last_inplace(c + q_amount * n, n, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);
 
-    //divide_and_round_q_last_inplace_loop_xq<<< n * 2 * (q_amount - 1) / small_block, small_block, 0, 0 >>>(c, q_amount, n);
+    divide_and_round_q_last_inplace_loop_xq<<< n * 2 * (q_amount - 1) / small_block, small_block, 0, 0 >>>(c, q_amount, n);
 
-    weird_m_stuff<<< n / 256, 256, 0, 0 >>>(n, m_poly_device, c, t, qi_div_t_rns_array_device, q_array_device, q_amount, n);  // look at the comments in the function
+    weird_m_stuff<<< n / 256, 256, 0, 0 >>>(m_poly_device, c, t, qi_div_t_rns_array_device, q_array_device, q_amount, n);  // look at the comments in the function
 }
