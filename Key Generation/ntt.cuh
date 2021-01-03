@@ -9,6 +9,8 @@ __constant__ unsigned long long q_cons[16];
 __constant__ unsigned q_bit_cons[16];
 __constant__ unsigned long long mu_cons[16];
 __constant__ unsigned long long inv_q_last_mod_q_cons[16];
+__constant__ unsigned long long inv_punctured_q_cons[16];
+__constant__ unsigned long long prod_t_gamma_mod_q_cons[16];
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
 // declarations for templated ntt functions

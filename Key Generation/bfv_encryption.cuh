@@ -211,23 +211,23 @@ void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsig
     generate_random_default(in, sizeof(char) * n + sizeof(unsigned) * n * 2);  // default is for default stream: this is for synchronization issues
     // otherwise ternary distributions may run before this function, which is UNACCEPTABLE
 
-    /*for (int i = 0; i < q_amount; i++)
+    for (int i = 0; i < q_amount; i++)
     {
-        ternary_dist(in, c + i * N, N, streams[i], q[i]);  // generate ternary dist poly directly into c0 and c1. c0 = c1,
-        ternary_dist(in, c + i * N + q_amount * N, N, streams[i], q[i]);  // its represented by 'u'
+        ternary_dist(in, c + i * n, n, streams[i], q[i]);  // generate ternary dist poly directly into c0 and c1. c0 = c1,
+        ternary_dist(in, c + i * n + q_amount * n, n, streams[i], q[i]);  // its represented by 'u'
         // for ease of operations and memory allocation, we have generated 2 of them (identical), since we override some stuff in polynomial multiplication.
     }
 
     for (int i = 0; i < q_amount; i++)
     {
-        gaussian_dist((unsigned*)(in + N), e + i * N, N, streams[i], q[i]);  // this is again for generation ternary distribution, although it's name is gaussian
+        gaussian_dist((unsigned*)(in + n), e + i * n, n, streams[i], q[i]);  // this is again for generation ternary distribution, although it's name is gaussian
         // e0
 
-        gaussian_dist((unsigned*)(in + N + N * 4), e + i * N + N * q_amount, N, streams[i], q[i]);  // i was joking this is for gaussian
+        gaussian_dist((unsigned*)(in + n + n * 4), e + i * n + n * q_amount, n, streams[i], q[i]);  // i was joking this is for gaussian
         // e1
-    }*/
+    }
 
-    convert_ternary_gaussian_x2<<< q_amount * n / convertBlockSize, convertBlockSize, 0, 0 >>>(in, c, e, n, q_amount);
+    //convert_ternary_gaussian_x2<<< q_amount * n / convertBlockSize, convertBlockSize, 0, 0 >>>(in, c, e, n, q_amount);
 
     /*for (int i = 0; i < q_amount; i++)
     {
@@ -236,26 +236,26 @@ void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsig
         half_poly_mul_device(c + i * N + q_amount * N, public_key + i * N + q_amount * N, N, streams[i + q_amount], q[i], mu_array[i], q_bit_lengths[i], psi_table_device + i * N, psiinv_table_device + i * N);
     }*/
 
-    forwardNTT_batch(c, n, psi_table_device, q_amount * 2, q_amount);
-    dim3 barrett_dim(n / 256, q_amount * 2);
-    barrett_batch<<< barrett_dim, 256, 0, 0 >>>(c, public_key, n, q_amount);
-    inverseNTT_batch(c, n, psiinv_table_device, q_amount * 2, q_amount);
+    //forwardNTT_batch(c, n, psi_table_device, q_amount * 2, q_amount);
+    //dim3 barrett_dim(n / 256, q_amount * 2);
+    //barrett_batch<<< barrett_dim, 256, 0, 0 >>>(c, public_key, n, q_amount);
+    //inverseNTT_batch(c, n, psiinv_table_device, q_amount * 2, q_amount);
 
-    /*for (int i = 0; i < q_amount; i++)
+    for (int i = 0; i < q_amount; i++)
     {
-        poly_add_device(c + i * N, e + i * N, N, streams[i], q[i]);  // add e0 to publickey[0]
-        poly_add_device(c + i * N + q_amount * N, e + i * N + N * q_amount, N, streams[i + q_amount], q[i]);  // add e1 to publickey[1]
-    }*/
+        poly_add_device(c + i * n, e + i * n, n, streams[i], q[i]);  // add e0 to publickey[0]
+        poly_add_device(c + i * n + q_amount * n, e + i * n + n * q_amount, n, streams[i + q_amount], q[i]);  // add e1 to publickey[1]
+    }
 
-    dim3 add_xq_dim(n * q_amount / small_block, 2);
-    poly_add_xq<<< add_xq_dim, small_block, 0, 0 >> > (c, e, n, q_amount);
+    //dim3 add_xq_dim(n * q_amount / small_block, 2);
+    //poly_add_xq<<< add_xq_dim, small_block, 0, 0 >> > (c, e, n, q_amount);
 
     divide_and_round_q_last_inplace_add_x2<<< n * 2 / small_block, small_block, 0, 0 >>>(c, n, q_amount);
 
-    /*divide_and_round_q_last_inplace(c, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
-    divide_and_round_q_last_inplace(c + q_amount * N, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);*/
+    //divide_and_round_q_last_inplace(c, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);  // do that complicated stuff for each public key
+    //divide_and_round_q_last_inplace(c + q_amount * N, N, streams, q, q_bit_lengths, mu_array, inv_q_last_mod_q, q_amount);
 
     divide_and_round_q_last_inplace_loop_xq<<< n * 2 * (q_amount - 1) / small_block, small_block, 0, 0 >>>(c, q_amount, n);
 
-    weird_m_stuff<<< n / 256, 256, 0, 0 >>>(m_poly_device, c, t, qi_div_t_rns_array_device, q_array_device, q_amount, n);  // look at the comments in the function
+    //weird_m_stuff<<< n / 256, 256, 0, 0 >>>(m_poly_device, c, t, qi_div_t_rns_array_device, q_array_device, q_amount, n);  // look at the comments in the function
 }

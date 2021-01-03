@@ -65,6 +65,38 @@ __global__ void barrett_batch(unsigned long long a[], const unsigned long long b
         a[i] = rc.low - q;
 }
 
+__global__ void barrett_batch_3param(unsigned long long c[], unsigned long long a[], const unsigned long long b[], unsigned n, unsigned division)
+{
+    unsigned index = blockIdx.y % division;
+    unsigned long long q = q_cons[index];
+    unsigned long long mu = mu_cons[index];
+    int qbit = q_bit_cons[index];
+
+    register int i = blockIdx.x * 256 + threadIdx.x + blockIdx.y * n;
+
+    register unsigned long long ra = a[i];
+    register unsigned long long rb = b[i];
+
+    uint128_t rc, rx;
+
+    mul64(ra, rb, rc);
+
+    rx = rc >> (qbit - 2);
+
+    mul64(rx.low, mu, rx);
+
+    uint128_t::shiftr(rx, qbit + 2);
+
+    mul64(rx.low, q, rx);
+
+    sub128(rc, rx);
+
+    if (rc.low < q)
+        c[i] = rc.low;
+    else
+        c[i] = rc.low - q;
+}
+
 __global__ void barrett_int(unsigned long long a[], const unsigned long long b, unsigned long long q, unsigned long long mu, int qbit)
 {
     register int i = blockIdx.x * 256 + threadIdx.x;
