@@ -11,18 +11,19 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="demo.cu" />
-  </ItemGroup>
-  <ItemGroup>
+    <ClInclude Include="bfv_decryption.cuh" />
     <ClInclude Include="bfv_encryption.cuh" />
-    <ClInclude Include="bfv_key_generation.cuh" />
+    <ClInclude Include="bfv_keygen.cuh" />
     <ClInclude Include="distributions.cuh" />
     <ClInclude Include="helper.h" />
-    <ClInclude Include="ntt.cuh" />
+    <ClInclude Include="ntt_60bit.cuh" />
     <ClInclude Include="parameter.h" />
     <ClInclude Include="poly_arithmetic.cuh" />
     <ClInclude Include="salsa_common.h" />
     <ClInclude Include="uint128.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="demo.cu" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{10457DC3-A57C-4B0E-9AC9-A3FFE96C864D}</ProjectGuid>

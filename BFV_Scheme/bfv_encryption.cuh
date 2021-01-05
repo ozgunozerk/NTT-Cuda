@@ -3,7 +3,7 @@
 #include <vector>
 using std::vector;
 
-#include "ntt.cuh"
+#include "ntt_60bit.cuh"
 #include "uint128.h"
 #include "salsa_common.h"
 #include "distributions.cuh"

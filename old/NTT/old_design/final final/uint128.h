@@ -26,6 +26,18 @@ public:
 		high = 0;
 	}
 
+	__device__ __forceinline__ uint128_t(const uint64_t& x, const uint64_t& y)
+	{
+		low = x * y;
+		high = __umul64hi(x, y);
+	}
+
+	__device__ __forceinline__ static void mult2x64(uint128_t& r, const uint64_t& x, const uint64_t& y)
+	{
+		r.high = __umul64hi(x, y);
+		r.low = x * y;
+	}
+
 	__host__ __device__ __forceinline__ void operator=(const uint128_t& r)
 	{
 		low = r.low;
@@ -85,9 +97,9 @@ public:
 		int z = 0;
 
 		if (x.high != 0)
-			z = log2((double)x.high) + 64;
+			z = log2((float)x.high) + 64;
 		else
-			z = log2((double)x.low);
+			z = log2((float)x.low);
 
 		return z;
 	}
@@ -311,7 +323,7 @@ __host__ __device__ __forceinline__ uint128_t operator%(uint128_t x, const uint6
 	return x;
 }
 
-__host__ inline static uint128_t host64x2(const uint64_t& x, const uint64_t& y)
+__host__ __device__ __forceinline__ static uint128_t host64x2(const uint64_t& x, const uint64_t& y)
 {
 	uint128_t z;
 
@@ -340,34 +352,17 @@ __host__ inline static uint128_t host64x2(const uint64_t& x, const uint64_t& y)
 	return z;
 }
 
-__device__ __forceinline__ void sub128(uint128_t& a, const uint128_t& b)
+//still slower even with all the inline directives
+__device__ __forceinline__ void device64x2n(const uint64_t& x, const uint64_t& y, uint128_t& z)
 {
-	asm("{\n\t"
-		"sub.cc.u64      %1, %3, %5;    \n\t"
-		"subc.u64        %0, %2, %4;    \n\t"
-		"}"
-		: "=l"(a.high), "=l"(a.low)
-		: "l"(a.high), "l"(a.low), "l"(b.high), "l"(b.low));
+	z.high = __umul64hi(x, y);
+	z.low = x * y;
 }
 
-__device__ __forceinline__ void mul64(const unsigned long long& a, const unsigned long long& b, uint128_t& c)
+//still slower even with all the inline directives
+__device__ __forceinline__ void device64x2s(const uint64_t& y, uint128_t& z)
 {
-	uint4 res;
-
-	asm("{\n\t"
-		"mul.lo.u32      %3, %5, %7;    \n\t"
-		"mul.hi.u32      %2, %5, %7;    \n\t" //alow * blow
-		"mad.lo.cc.u32   %2, %4, %7, %2;\n\t"
-		"madc.hi.u32     %1, %4, %7,  0;\n\t" //ahigh * blow
-		"mad.lo.cc.u32   %2, %5, %6, %2;\n\t"
-		"madc.hi.cc.u32  %1, %5, %6, %1;\n\t" //alow * bhigh
-		"madc.hi.u32     %0, %4, %6,  0;\n\t"
-		"mad.lo.cc.u32   %1, %4, %6, %1;\n\t" //ahigh * bhigh
-		"addc.u32        %0, %0, 0;     \n\t" //add final carry
-		"}"
-		: "=r"(res.x), "=r"(res.y), "=r"(res.z), "=r"(res.w)
-		: "r"((unsigned)(a >> 32)), "r"((unsigned)a), "r"((unsigned)(b >> 32)), "r"((unsigned)b));
-
-	c.high = ((unsigned long long)res.x << 32) + res.y;
-	c.low = ((unsigned long long)res.z << 32) + res.w;;
+	z.high = __umul64hi(z.low, y);
+	z.low = z.low * y;
 }
+

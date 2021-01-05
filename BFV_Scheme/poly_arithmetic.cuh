@@ -4,7 +4,7 @@
 #include "device_launch_parameters.h"
 
 #include "uint128.h"
-#include "ntt.cuh"
+#include "ntt_60bit.cuh"
 
 __global__ void barrett(unsigned long long a[], const unsigned long long b[], unsigned long long q, unsigned long long mu, int qbit)
 {
