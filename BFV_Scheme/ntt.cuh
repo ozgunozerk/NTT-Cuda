@@ -337,7 +337,7 @@ __host__ void forwardNTT(unsigned long long* device_a, unsigned n, cudaStream_t&
     {
         CTBasedNTTInnerSingle<1, 4096> << <1, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
     }
-    else
+    else if (n == 2048)
     {
         CTBasedNTTInnerSingle<1, 2048> << <1, 1024, 2048 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
     }
@@ -375,7 +375,7 @@ __host__ void inverseNTT(unsigned long long* device_a, unsigned n, cudaStream_t&
 
         GSBasedINTTInner<1, 4096> << <4096 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
     }
-    else
+    else if (n == 2048)
     {
         GSBasedINTTInnerSingle<1, 2048> << <1, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
     }
@@ -638,7 +638,7 @@ __host__ void forwardNTT_batch(unsigned long long* device_a, unsigned n, unsigne
         dim3 single_dim(1, num);
         CTBasedNTTInnerSingle_batch<1, 4096> << <single_dim, 1024, 4096 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
     }
-    else
+    else if (n == 2048)
     {
         dim3 single_dim(1, num);
         CTBasedNTTInnerSingle_batch<1, 2048> << <single_dim, 1024, 2048 * sizeof(unsigned long long), 0 >> > (device_a, psi_powers, division);
@@ -685,7 +685,7 @@ __host__ void inverseNTT_batch(unsigned long long* device_a, unsigned n, unsigne
 
         GSBasedINTTInner_batch<1, 4096> << <multi_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
     }
-    else
+    else if (n == 2048)
     {
         dim3 single_dim(1, num);
         GSBasedINTTInnerSingle_batch<1, 2048> << <single_dim, 1024, 0, 0 >> > (device_a, psiinv_powers, division);
