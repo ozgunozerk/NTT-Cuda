@@ -17,14 +17,17 @@ __global__ void ternary_dist_xq(unsigned char* in, unsigned long long* secret_ke
 
     float d = (float)in[i % n];
 
-    d /= (256.0f / 3);
+    d /= (255.0f / 3);
 
-    if (d >= 2)
+    /*if (d >= 2)
         secret_key[i] = 1;
     else if (d >= 1)
         secret_key[i] = 0;
     else
-        secret_key[i] = q_cons[i / n] - 1;
+        secret_key[i] = q_cons[i / n] - 1;*/
+
+    int b = int(d) - 1;
+    secret_key[i] = (b < 0) * q_cons[i / n] + b;
 }
 
 __global__ void uniform_dist_xq(unsigned char* in, unsigned long long* public_key, unsigned n, unsigned q_amount)

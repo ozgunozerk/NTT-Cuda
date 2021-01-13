@@ -433,12 +433,12 @@ template __global__ void GSBasedINTTInner<4, 32768>(unsigned a[], unsigned q, un
 template __global__ void GSBasedINTTInnerSingle<8, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
 
 // n = 65536
-template __global__ void CTBasedNTTInner<1, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
-template __global__ void CTBasedNTTInner<2, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
-template __global__ void CTBasedNTTInner<4, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
-template __global__ void CTBasedNTTInnerSingle<8, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
-template __global__ void GSBasedINTTInner<1, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
-template __global__ void GSBasedINTTInner<2, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
-template __global__ void GSBasedINTTInner<4, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
-template __global__ void GSBasedINTTInner<8, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
-template __global__ void GSBasedINTTInnerSingle<16, 32768>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
+template __global__ void CTBasedNTTInner<1, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
+template __global__ void CTBasedNTTInner<2, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
+template __global__ void CTBasedNTTInner<4, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
+template __global__ void CTBasedNTTInnerSingle<8, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psi_powers[]);
+template __global__ void GSBasedINTTInner<1, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
+template __global__ void GSBasedINTTInner<2, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
+template __global__ void GSBasedINTTInner<4, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
+template __global__ void GSBasedINTTInner<8, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);
+template __global__ void GSBasedINTTInnerSingle<16, 65536>(unsigned a[], unsigned q, unsigned mu, int qbit, unsigned psiinv_powers[]);

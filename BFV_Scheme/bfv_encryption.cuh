@@ -19,21 +19,27 @@ __global__ void convert_ternary_gaussian_x2(unsigned char* in, unsigned long lon
 
     float d = (float)in[i % n];
 
-    d /= (256.0f / 3);
+    d /= (255.0f / 3);
 
-    if (d >= 2)
+    /*if (d >= 2)
         out_t1[i] = 1;
     else if (d >= 1)
         out_t1[i] = 0;
     else
-        out_t1[i] = q_cons[i / n] - 1;
+        out_t1[i] = q_cons[i / n] - 1;*/
 
-    if (d >= 2)
+    int b = int(d) - 1;
+    out_t1[i] = (b < 0) * q_cons[i / n] + b;
+
+    /*if (d >= 2)
         out_t1[i + n * q_amount] = 1;
     else if (d >= 1)
         out_t1[i + n * q_amount] = 0;
     else
-        out_t1[i + n * q_amount] = q_cons[i / n] - 1;
+        out_t1[i + n * q_amount] = q_cons[i / n] - 1;*/
+
+    b = int(d) - 1;
+    out_t1[i + n * q_amount] = (b < 0) * q_cons[i / n] + b;
 
     // gaussian
 

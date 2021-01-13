@@ -258,7 +258,7 @@ void generate_random_default(unsigned char* a, unsigned n)
 
     size = NBLKS * XSALSA20_BLOCKSZ;
 
-    memset(k, 77, XSALSA20_CRYPTO_KEYBYTES);
+    memset(k, 1, XSALSA20_CRYPTO_KEYBYTES);
     memset(h_nonce, 0, XSALSA20_CRYPTO_NONCEBYTES);
 
     cudaMemcpyToSymbolAsync(key, k, XSALSA20_CRYPTO_KEYBYTES, 0, cudaMemcpyHostToDevice); //re add async
