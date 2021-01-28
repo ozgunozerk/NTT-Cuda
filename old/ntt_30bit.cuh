@@ -2,6 +2,7 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+// check ntt_60bit.cuh for detailed comments, these 2 files are nearly identical
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
 // declarations for templated ntt functions

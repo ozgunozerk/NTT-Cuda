@@ -15,28 +15,28 @@ __constant__ unsigned long long prod_t_gamma_mod_q_cons[16];
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
 // declarations for templated ntt functions
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // single kernel NTT
 __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psi_powers[]);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // single kernel INTT
 __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psiinv_powers[]);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // multi kernel NTT
 __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psi_powers[]);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // multi kernel INTT
 __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psiinv_powers[]);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // single kernel NTT batch
 __global__ void CTBasedNTTInnerSingle_batch(unsigned long long a[], unsigned long long psi_powers[], unsigned division);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // single kernel INTT batch
 __global__ void GSBasedINTTInnerSingle_batch(unsigned long long a[], unsigned long long psiinv_powers[], unsigned division);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // multi kernel omg are you still reading this
 __global__ void CTBasedNTTInner_batch(unsigned long long a[], unsigned long long psi_powers[], unsigned division);
 
-template<unsigned l, unsigned n>
+template<unsigned l, unsigned n>  // i'm not gonna write this one, figure this out on your own
 __global__ void GSBasedINTTInner_batch(unsigned long long a[], unsigned long long psiinv_powers[], unsigned division);
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -63,20 +63,20 @@ __device__ __forceinline__ void singleBarrett(uint128_t& a, unsigned long long& 
 template<unsigned l, unsigned n>
 __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psi_powers[])
 {
-    register int local_tid = threadIdx.x;
+    register int local_tid = threadIdx.x; 
 
-    extern __shared__ unsigned long long shared_array[];
+    extern __shared__ unsigned long long shared_array[];  // declaration of shared_array
 
 #pragma unroll
     for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++)
-    {
+    {  // copying to shared from global
         register int global_tid = local_tid + iteration_num * 1024;
         shared_array[global_tid] = a[global_tid + blockIdx.x * (n / l)];
     }
 
 #pragma unroll
     for (int length = l; length < n; length *= 2)
-    {
+    {  // for loops are required since we are handling all the remaining iterations in this kernel
         register int step = (n / length) / 2;
 
 #pragma unroll
@@ -115,7 +115,7 @@ __global__ void CTBasedNTTInnerSingle(unsigned long long a[], unsigned long long
 
 #pragma unroll
     for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++)
-    {
+    {  // copy back to global from shared
         register int global_tid = local_tid + iteration_num * 1024;
         a[global_tid + blockIdx.x * (n / l)] = shared_array[global_tid];
     }
@@ -127,13 +127,13 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 {
     register int local_tid = threadIdx.x;
 
-    __shared__ unsigned long long shared_array[2048];
+    __shared__ unsigned long long shared_array[2048];  // declaration of shared_array
 
     register unsigned long long q2 = (q + 1) >> 1;
 
 #pragma unroll
     for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++)
-    {
+    {  // copying to shared from global
         register int global_tid = local_tid + iteration_num * 1024;
         shared_array[global_tid] = a[global_tid + blockIdx.x * (n / l)];
     }
@@ -142,7 +142,7 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 
 #pragma unroll
     for (int length = (n / 2); length >= l; length /= 2)
-    {
+    {  // for loops are required since we are handling all the remaining iterations in this kernel
         register int step = (n / length) / 2;
 
 #pragma unroll
@@ -183,7 +183,7 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 
 #pragma unroll
     for (int iteration_num = 0; iteration_num < (n / 1024 / l); iteration_num++)
-    {
+    {  // copy back to global from shared
         register int global_tid = local_tid + iteration_num * 1024;
         a[global_tid + blockIdx.x * (n / l)] = shared_array[global_tid];
     }
@@ -192,6 +192,8 @@ __global__ void GSBasedINTTInnerSingle(unsigned long long a[], unsigned long lon
 template<unsigned l, unsigned n>
 __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psi_powers[])
 {
+    // no shared memory - handling only one iteration in here
+
     int length = l;
 
     register int global_tid = blockIdx.x * 1024 + threadIdx.x;
@@ -223,6 +225,8 @@ __global__ void CTBasedNTTInner(unsigned long long a[], unsigned long long q, un
 template<unsigned l, unsigned n>
 __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psiinv_powers[])
 {
+    // no shared memory - handling only one iteration in here
+
     int length = l;
 
     register int global_tid = blockIdx.x * 1024 + threadIdx.x;
@@ -261,7 +265,7 @@ __global__ void GSBasedINTTInner(unsigned long long a[], unsigned long long q, u
 }
 
 __host__ void forwardNTTdouble(unsigned long long* device_a, unsigned long long* device_b, unsigned n, cudaStream_t& stream1, cudaStream_t& stream2, unsigned long long q, unsigned long long mu, int bit_length, unsigned long long* psi_powers)
-{
+{  // performs 2 NTT operations together, check the forwardNTT function below for detailed comments
     if (n == 32768)
     {
         CTBasedNTTInner<1, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
@@ -308,38 +312,38 @@ __host__ void forwardNTTdouble(unsigned long long* device_a, unsigned long long*
 }
 
 __host__ void forwardNTT(unsigned long long* device_a, unsigned n, cudaStream_t& stream1, unsigned long long q, unsigned long long mu, int bit_length, unsigned long long* psi_powers)
-{
+{  // performs single NTT operation
     if (n == 32768)
     {
-        CTBasedNTTInner<1, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // first iteration (multi-kernel)
 
-        CTBasedNTTInner<2, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<2, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // second iter (mult-kernel)
 
-        CTBasedNTTInner<4, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<4, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // third iter (multi-kernel)
 
-        CTBasedNTTInnerSingle<8, 32768> << <8, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInnerSingle<8, 32768> << <8, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // rest of the iterations, single-kernel
     }
     else if (n == 16384)
     {
-        CTBasedNTTInner<1, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // first iteration (multi-kernel)
 
-        CTBasedNTTInner<2, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<2, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // second iter (mult-kernel)
 
-        CTBasedNTTInnerSingle<4, 16384> << <4, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInnerSingle<4, 16384> << <4, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // rest of the iterations, single-kernel
     }
     else if (n == 8192)
     {
-        CTBasedNTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // first iteration (multi-kernel)
 
-        CTBasedNTTInnerSingle<2, 8192> << <2, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInnerSingle<2, 8192> << <2, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // rest of the iterations, single-kernel
     }
     else if (n == 4096)
     {
-        CTBasedNTTInnerSingle<1, 4096> << <1, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInnerSingle<1, 4096> << <1, 1024, 4096 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // all iterations, single-kernel
     }
     else if (n == 2048)
     {
-        CTBasedNTTInnerSingle<1, 2048> << <1, 1024, 2048 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);
+        CTBasedNTTInnerSingle<1, 2048> << <1, 1024, 2048 * sizeof(unsigned long long), stream1 >> > (device_a, q, mu, bit_length, psi_powers);  // all iterations, single-kernel
     }
 }
 
@@ -347,37 +351,37 @@ __host__ void inverseNTT(unsigned long long* device_a, unsigned n, cudaStream_t&
 {
     if (n == 32768)
     {
-        GSBasedINTTInnerSingle<16, 32768> << <16, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-
-        GSBasedINTTInner<8, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<4, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<2, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<1, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInnerSingle<16, 32768> << <16, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // single-kernel till last 4 iterations
+        
+        GSBasedINTTInner<8, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 4th iter
+        GSBasedINTTInner<4, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 3rd iter
+        GSBasedINTTInner<2, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 2nd iter
+        GSBasedINTTInner<1, 32768> << <32768 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for the last iter
     }
     else if (n == 16384)
     {
-        GSBasedINTTInnerSingle<8, 16384> << <8, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInnerSingle<8, 16384> << <8, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // single-kernel till last 3 iterations
 
-        GSBasedINTTInner<4, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<2, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<1, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInner<4, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 3rd iter
+        GSBasedINTTInner<2, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 2nd iter
+        GSBasedINTTInner<1, 16384> << <16384 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for the last iter
     }
     else if (n == 8192)
     {
-        GSBasedINTTInnerSingle<4, 8192> << <4, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInnerSingle<4, 8192> << <4, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // single-kernel till last 2 iterations
 
-        GSBasedINTTInner<2, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
-        GSBasedINTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInner<2, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last 2nd iter
+        GSBasedINTTInner<1, 8192> << <8192 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for last last iter
     }
     else if (n == 4096)
     {
-        GSBasedINTTInnerSingle<2, 4096> << <2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInnerSingle<2, 4096> << <2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // single-kernel till the last iteration
 
-        GSBasedINTTInner<1, 4096> << <4096 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInner<1, 4096> << <4096 / 1024 / 2, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // multi-kernel for the last iter
     }
     else if (n == 2048)
     {
-        GSBasedINTTInnerSingle<1, 2048> << <1, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);
+        GSBasedINTTInnerSingle<1, 2048> << <1, 1024, 0, stream1 >> > (device_a, q, mu, bit_length, psiinv_powers);  // single-kernel for all iterations
     }
 }
 
@@ -694,7 +698,7 @@ __host__ void inverseNTT_batch(unsigned long long* device_a, unsigned n, unsigne
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
 // explicit template instantiations
-// all permutations are required for the program to compile
+// all these are required for the program to compile
 
 // n = 2048
 template __global__ void CTBasedNTTInnerSingle<1, 2048>(unsigned long long a[], unsigned long long q, unsigned long long mu, int qbit, unsigned long long psi_powers[]);
@@ -734,7 +738,7 @@ template __global__ void GSBasedINTTInnerSingle<16, 32768>(unsigned long long a[
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------
 // explicit template instantiations for batch ntt
-// all permutations are required for the program to compile
+// all these are required for the program to compile
 
 // n = 2048
 template __global__ void CTBasedNTTInnerSingle_batch<1, 2048>(unsigned long long a[], unsigned long long psi_powers[], unsigned division);
