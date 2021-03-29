@@ -1,6 +1,9 @@
 #pragma once
 
 #include <vector>
+#include <cstdio>
+#include <stdio.h>
+#include <cuda.h>
 using std::vector;
 
 #include "ntt_60bit.cuh"
@@ -209,6 +212,14 @@ __global__ void weird_m_stuff(unsigned long long* m_poly, unsigned long long* c0
     }
 }
 
+
+	/*
+	ENCRYPTION:
+	C is the ciphertext. It is the concetanation of c0 and c1. They both have (n * q_amount) items, so, c has (n * q_amount * 2) elements.
+	However, in the end, last q's in the RNS system are dropped => c0 and c1 having the size of (n * (q_amount-1) ). Although, relocating space would require extra work and
+	is inefficient, we do not resize the array c. Last parts of the c0 and c1 are simply ignored, which are c[8192:12288] and c[20480:24576].
+	This is approach is also followed in Decryption (ignoring the irrelevant parts). Read Decryption's comments for more detail
+	*/
 void encryption_rns(unsigned long long* c, unsigned long long* public_key, unsigned char* in, unsigned long long** u, unsigned long long* e, unsigned n,
     cudaStream_t streams[], unsigned long long* q, vector<unsigned> q_bit_lengths,
     vector<unsigned long long> mu_array, vector<unsigned long long> inv_q_last_mod_q, unsigned long long* psi_table_device, unsigned long long* psiinv_table_device,

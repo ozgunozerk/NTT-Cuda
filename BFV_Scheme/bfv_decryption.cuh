@@ -1,12 +1,11 @@
 #pragma once
 
 #include <vector>
+#include <stdio.h>
 using std::vector;
 
 #include "ntt_60bit.cuh"
 #include "uint128.h"
-#include "salsa_common.h"
-#include "distributions.cuh"
 #include "poly_arithmetic.cuh"
 
 #define small_block 128
@@ -57,6 +56,23 @@ __global__ void poly_mul_int_xq_invpq(unsigned long long* c, unsigned n)
     c[i] = ra.low;
 }
 
+
+
+	/* DECRYPTION:
+	c has (n * (q_amount-1) * 2) elements efficiently. But since in Encryption, we needed (n * q_amount * 2) elements for c's initial steps,
+	it is been allocated (n * q_amount * 2) space for c, and we did not resize c for efficiency. After encryption, the last q's 
+	(and their corresponding polynomials) of c0 and c1 are dropped from c. 
+	Dropped parts corresponds to => c[8192:12288] and c[20480:24576]. These parts are not removed, but ignored.
+	ALthough we only need (n * (q_amount-1) * 2) items for Decryption, we have to provide (n * q_amount * 2) items inside c array.
+	
+	Here is a how c_array should be crafted:
+
+	c[0 : n * (q_amount-1)] = c0
+	c[n * (q_amount-1) : n * q_amount] = PADDING (not important, can be 0's or whatever we like)
+	c[n * q_amount : n * q_amount + n * (q_amount-1)] = c1
+	c[n * q_amount + n * (q_amount-1) : n * q_amount * 2] = PADDING (not important, can be 0's or whatever we like)
+
+	*/
 void decryption_rns(unsigned long long* c, unsigned long long* secret_key,
     unsigned long long* q, vector<unsigned>& q_bit_lengths, vector<unsigned long long>& mu_array,
     unsigned long long* psi_table_device, unsigned long long* psiinv_table_device, int n, unsigned q_amount,
@@ -65,6 +81,7 @@ void decryption_rns(unsigned long long* c, unsigned long long* secret_key,
     vector<unsigned>& output_base_bit_lengths, vector<unsigned long long>& neg_inv_q_mod_t_gamma,
     unsigned long long gamma_div_2, vector<unsigned long long> prod_t_gamma_mod_q) // hehehehe
 {
+
     cudaStream_t* streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) * q_amount);
     for (int i = 0; i < q_amount; i++)
         cudaStreamCreate(&streams[i]);
